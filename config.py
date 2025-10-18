@@ -185,24 +185,3 @@ if __name__ != "__main__":
             logger.warning(f"  {error}")
     else:
         logger.info("✅ Конфигурация валидна")
-        ```python
-# ============= TRIXACTIVITY НАСТРОЙКИ =============
-
-# Chat ID для Budapest People 
-BUDAPEST_PEOPLE_ID = int(os.getenv("BUDAPEST_PEOPLE_ID", "-1003114019170"))
-
-# Триксики
-TRIXIKI_DAILY_REWARD = 10
-TRIXIKI_MAX_BALANCE = 15
-TRIXIKI_MAX_BALANCE_EXTENDED = 20
-TRIXIKI_FREEZE_HOURS = 3
-
-# Цены действий
-TRIXIKI_PRICES = {
-    'like': 3,
-    'comment': 4,
-    'follow': 5
-}
-```
-
----
