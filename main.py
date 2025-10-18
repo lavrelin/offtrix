@@ -62,28 +62,13 @@ from handlers.games_handler import (
     handle_game_text_input, handle_game_media_input, handle_game_callback
 )
 
-
 # ============= HANDLERS - УТИЛИТЫ =============
 from handlers.medicine_handler import hp_command, handle_hp_callback
 from handlers.stats_commands import channelstats_command, fullstats_command, resetmsgcount_command, chatinfo_command
 from handlers.help_commands import trix_command, handle_trix_callback
 from handlers.social_handler import social_command, giveaway_command
 from handlers.bonus_handler import bonus_command
-from handlers.trix_activity_handlers import (
-    liketime_command,
-    handle_lt_callback,
-    handle_lt_text,
-    show_main_menu,
-    balance_command,
-    create_task_menu,
-    handle_create_action,
-    handle_create_input,
-    show_pool,
-    perform_task,
-    liketimeon_command,
-    liketimeoff_command,
-    trixikiadd_command
-)
+
 # ============= HANDLERS - РОЗЫГРЫШИ =============
 from handlers.giveaway_handler import (
     giveaway_command, handle_giveaway_callback, p2p_command
