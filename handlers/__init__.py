@@ -52,6 +52,19 @@ from .autopost_handler import (
     autopost_command, 
     autopost_test_command
 )
+from .catalog_handler import (
+    catalog_command,
+    search_command,
+    addtocatalog_command,
+    review_command,
+    catalogpriority_command,
+    addcatalogreklama_command,
+    catalog_stats_users_command,
+    catalog_stats_categories_command,
+    catalog_stats_popular_command,
+    handle_catalog_callback,
+    handle_catalog_text
+)
 from .games_handler import (
     wordadd_command, 
     wordedit_command, 
@@ -188,5 +201,20 @@ __all__ = [
     'giveaway_command',
     
     # Bonus
-    'bonus_command'
+    'bonus_command',
+    __all__ = [
+    # ... existing handlers ...
+    
+    # Catalog
+    'catalog_command',
+    'search_command',
+    'addtocatalog_command',
+    'review_command',
+    'catalogpriority_command',
+    'addcatalogreklama_command',
+    'catalog_stats_users_command',
+    'catalog_stats_categories_command',
+    'catalog_stats_popular_command',
+    'handle_catalog_callback',
+    'handle_catalog_text'
 ]
