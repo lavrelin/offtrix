@@ -375,6 +375,13 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 text = update.message.text or update.message.caption
                 await handle_piar_text(update, context, field, text)
             return
+            # Catalog text handler - НОВОЕ
+        if ('catalog_add' in context.user_data or 
+            'catalog_review' in context.user_data or
+            'catalog_priority' in context.user_data or
+            'catalog_ad' in context.user_data):
+            await handle_catalog_text(update, context)
+            return
         
         # Rating handlers
         if waiting_for == 'rate_photo':
