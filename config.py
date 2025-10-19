@@ -22,6 +22,8 @@ class Config:
     ADMIN_GROUP_ID = int(os.getenv("ADMIN_GROUP_ID", "-4843909295"))
     CHAT_FOR_ACTUAL = int(os.getenv("CHAT_FOR_ACTUAL", "-1002734837434"))
     BUDAPEST_CHAT_ID = int(os.getenv("BUDAPEST_CHAT_ID", "-1002883770818"))
+    CATALOG_CHANNEL_ID = int(os.getenv("CATALOG_CHANNEL_ID", "-1002601716810"))
+    
     
     # Дополнительные каналы
     TRADE_CHANNEL_ID = int(os.getenv("TRADE_CHANNEL_ID", "-1003033694255"))
