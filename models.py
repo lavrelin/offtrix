@@ -53,3 +53,60 @@ class Post(Base):
     piar_telegram = Column(String(255), nullable=True)
     piar_price = Column(String(255), nullable=True)
     piar_description = Column(Text, nullable=True)
+   # ============= КАТАЛОГ УСЛУГ =============
+
+class CatalogPost(Base):
+    """Запись в каталоге услуг"""
+    __tablename__ = 'catalog_posts'
+    
+    id = Column(Integer, primary_key=True)
+    user_id = Column(BigInteger, nullable=False)
+    catalog_link = Column(String(500), nullable=False)
+    category = Column(String(100), nullable=False)
+    name = Column(String(255))
+    tags = Column(JSON, default=list)
+    
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    is_active = Column(Boolean, default=True)
+    clicks = Column(Integer, default=0)
+    views = Column(Integer, default=0)
+    
+    is_priority = Column(Boolean, default=False)
+    is_ad = Column(Boolean, default=False)
+    ad_frequency = Column(Integer, default=10)
+
+
+class CatalogReview(Base):
+    """Отзывы о специалистах"""
+    __tablename__ = 'catalog_reviews'
+    
+    id = Column(Integer, primary_key=True)
+    catalog_post_id = Column(Integer, ForeignKey('catalog_posts.id'))
+    user_id = Column(BigInteger, nullable=False)
+    username = Column(String(255))
+    review_text = Column(Text)
+    rating = Column(Integer)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class CatalogSubscription(Base):
+    """Подписки на уведомления"""
+    __tablename__ = 'catalog_subscriptions'
+    
+    id = Column(Integer, primary_key=True)
+    user_id = Column(BigInteger, nullable=False)
+    subscription_type = Column(String(50))
+    subscription_value = Column(String(255))
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class CatalogSession(Base):
+    """Сессии просмотра каталога"""
+    __tablename__ = 'catalog_sessions'
+    
+    id = Column(Integer, primary_key=True)
+    user_id = Column(BigInteger, nullable=False)
+    viewed_posts = Column(JSON, default=list)
+    last_activity = Column(DateTime, default=datetime.utcnow)
+    session_active = Column(Boolean, default=True) 
