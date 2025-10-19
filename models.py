@@ -1,6 +1,7 @@
-from sqlalchemy import Column, Integer, BigInteger, String, DateTime, Boolean, Text, JSON, Enum as SQLEnum
+from sqlalchemy import Column, Integer, BigInteger, String, DateTime, Boolean, Text, ForeignKey
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.sql import func
+from sqlalchemy.orm import relationship
 from datetime import datetime
 from enum import Enum
 
