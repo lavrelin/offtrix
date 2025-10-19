@@ -7,7 +7,7 @@ import logging
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 from config import Config
-#from services.catalog_service import catalog_service, CATALOG_CATEGORIES
+from services.catalog_service import catalog_service, CATALOG_CATEGORIES
 
 logger = logging.getLogger(__name__)
 
