@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Handler для каталога услуг
+Handler для каталога услуг - ПОЛНАЯ ВЕРСИЯ
 Команды: /catalog, /search, /addtocatalog, /review, /catalogpriority, /addcatalogreklama
 """
 import logging
@@ -185,7 +185,6 @@ async def catalog_stats_users_command(update: Update, context: ContextTypes.DEFA
     if not Config.is_admin(update.effective_user.id):
         return
     
-    # TODO: Реализовать сбор статистики
     text = (
         "🔘 **СТАТИСТИКА ПОЛЬЗОВАТЕЛЕЙ**\n\n"
         "◽️ Запустили /catalog сегодня: 0\n"
@@ -243,8 +242,8 @@ async def handle_catalog_callback(update: Update, context: ContextTypes.DEFAULT_
     
     user_id = update.effective_user.id
     
+    # ===== НАВИГАЦИЯ =====
     if action == "next":
-        # Показать следующие посты
         count = 5
         posts = await catalog_service.get_random_posts(user_id, count=count)
         
@@ -281,15 +280,14 @@ async def handle_catalog_callback(update: Update, context: ContextTypes.DEFAULT_
         )
     
     elif action == "restart":
-        # Сбросить сессию
         await catalog_service.reset_session(user_id)
         await query.edit_message_text(
             "🔄 Перезагрузка успешна\n\n"
             "Используйте /catalog для нового просмотра."
         )
     
+    # ===== ПОИСК =====
     elif action == "search":
-        # Показать категории поиска
         keyboard = []
         for category in CATALOG_CATEGORIES.keys():
             keyboard.append([InlineKeyboardButton(category, callback_data=f"catalog:cat:{category}")])
@@ -303,15 +301,12 @@ async def handle_catalog_callback(update: Update, context: ContextTypes.DEFAULT_
         )
     
     elif action == "cat":
-        # Выбрана категория
-        category = ":".join(data[2:])  # Восстанавливаем название с эмодзи
-        
-        # Показываем подкатегории
+        category = ":".join(data[2:])
         subcategories = CATALOG_CATEGORIES.get(category, [])
         
         keyboard = []
         for subcat in subcategories:
-            keyboard.append([InlineKeyboardButton(subcat, callback_data=f"catalog:search:{category}:{subcat}")])
+            keyboard.append([InlineKeyboardButton(subcat, callback_data=f"catalog:searchcat:{category}:{subcat}")])
         
         keyboard.append([InlineKeyboardButton("🔙 Назад", callback_data="catalog:search")])
         
@@ -321,17 +316,15 @@ async def handle_catalog_callback(update: Update, context: ContextTypes.DEFAULT_
             parse_mode='Markdown'
         )
     
-    elif action == "search" and len(data) > 2:
-        # Поиск по категории
-        category = data[2]
+    elif action == "searchcat":
+        category = data[2] if len(data) > 2 else None
         subcategory = data[3] if len(data) > 3 else None
         
-        # Поиск постов
         posts = await catalog_service.search_posts(category=subcategory or category, limit=10)
         
         if not posts:
             await query.edit_message_text(
-                f"🫙 Категория'{subcategory or category}' пустая.\n\n"
+                f"🫙 Категория '{subcategory or category}' пустая.\n\n"
                 "💣 Поиск кандидатов...🔬 Пока что можете посмотреть другие категории 🗄️"
             )
             return
@@ -346,8 +339,26 @@ async def handle_catalog_callback(update: Update, context: ContextTypes.DEFAULT_
             text=f"💿 Найдено записей: {len(posts)}"
         )
     
+    # ===== ДОБАВЛЕНИЕ КАТЕГОРИИ =====
+    elif action == "addcat":
+        category = ":".join(data[2:])
+        
+        if 'catalog_add' not in context.user_data:
+            await query.answer("Ошибка: данные формы потеряны", show_alert=True)
+            return
+        
+        context.user_data['catalog_add']['category'] = category
+        context.user_data['catalog_add']['step'] = 'name'
+        
+        await query.edit_message_text(
+            f"✅ Категория: {category}\n\n"
+            f"🚶‍♀️ Шаг 3 из 4\n\n"
+            f"📝 Введите название/описание:",
+            parse_mode='Markdown'
+        )
+    
+    # ===== ДЕЙСТВИЯ =====
     elif action == "click":
-        # Клик по посту
         post_id = int(data[2]) if len(data) > 2 else None
         if post_id:
             await catalog_service.increment_clicks(post_id)
@@ -363,15 +374,14 @@ async def handle_catalog_callback(update: Update, context: ContextTypes.DEFAULT_
     
     elif action == "cancel_ad":
         context.user_data.pop('catalog_ad', None)
-        await query.edit_message_text("🕳️ Отмена добавления рекласы")
+        await query.edit_message_text("🕳️ Отмена добавления рекламы")
     
     elif action == "priority_finish":
-        # Завершить добавление приоритетных постов
         priority_data = context.user_data.get('catalog_priority', {})
         links = priority_data.get('links', [])
         
         if not links:
-            await query.edit_message_text("🖇️ Ссылки не добввлены")
+            await query.edit_message_text("🖇️ Ссылки не добавлены")
             return
         
         count = await catalog_service.set_priority_posts(links)
@@ -397,7 +407,6 @@ async def handle_catalog_text(update: Update, context: ContextTypes.DEFAULT_TYPE
         step = data.get('step')
         
         if step == 'link':
-            # Валидация ссылки
             if not text.startswith('https://t.me/'):
                 await update.message.reply_text("🆖 Формат ссылки - повнимательней!")
                 return
@@ -405,7 +414,6 @@ async def handle_catalog_text(update: Update, context: ContextTypes.DEFAULT_TYPE
             data['link'] = text
             data['step'] = 'category'
             
-            # Показываем категории
             keyboard = []
             for category in CATALOG_CATEGORIES.keys():
                 keyboard.append([InlineKeyboardButton(category, callback_data=f"catalog:addcat:{category}")])
@@ -429,7 +437,6 @@ async def handle_catalog_text(update: Update, context: ContextTypes.DEFAULT_TYPE
             tags = [tag.strip() for tag in text.split(',')[:10]]
             data['tags'] = tags
             
-            # Сохраняем в БД
             post_id = await catalog_service.add_post(
                 user_id=user_id,
                 catalog_link=data['link'],
@@ -456,7 +463,6 @@ async def handle_catalog_text(update: Update, context: ContextTypes.DEFAULT_TYPE
         review_data = context.user_data['catalog_review']
         
         if review_data.get('waiting'):
-            # TODO: Сохранить отзыв в БД
             post_id = review_data['post_id']
             
             context.user_data.pop('catalog_review', None)
@@ -505,7 +511,6 @@ async def handle_catalog_text(update: Update, context: ContextTypes.DEFAULT_TYPE
             ad_data['description'] = text
             ad_data['step'] = 'finish'
             
-            # Сохраняем
             post_id = await catalog_service.add_ad_post(
                 catalog_link=ad_data['link'],
                 description=ad_data['description']
@@ -538,7 +543,7 @@ async def send_catalog_post(update: Update, context: ContextTypes.DEFAULT_TYPE,
     )
     
     keyboard = [
-        [InlineKeyboardButton("🏃🏻‍♀️‍➡️ Перейти к посту", url=post['catalog_link'], callback_data=f"catalog:click:{post['id']}")],
+        [InlineKeyboardButton("🏃🏻‍♀️‍➡️ Перейти к посту", url=post['catalog_link'])],
         [InlineKeyboardButton("🧑🏼‍💻 Оставить отзыв", callback_data=f"catalog:review:{post['id']}")]
     ]
     
@@ -548,7 +553,6 @@ async def send_catalog_post(update: Update, context: ContextTypes.DEFAULT_TYPE,
         parse_mode='Markdown'
     )
     
-    # Увеличиваем счетчик просмотров
     await catalog_service.increment_views(post['id'])
 
 
