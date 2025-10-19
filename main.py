@@ -319,6 +319,8 @@ async def handle_all_callbacks(update: Update, context):
             await handle_rate_callback(update, context)
         elif handler_type == "rate_mod":
             await handle_rate_moderation_callback(update, context)
+        elif handler_type == "catalog":  # НОВОЕ
+            await handle_catalog_callback(update, context)
         else:
             await query.answer("⚠️ Неизвестная команда", show_alert=True)
     except Exception as e:
