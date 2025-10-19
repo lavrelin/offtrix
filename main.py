@@ -51,6 +51,12 @@ from handlers.advanced_moderation import (
 from handlers.admin_handler import admin_command, say_command, handle_admin_callback, broadcast_command, sendstats_command
 from handlers.autopost_handler import autopost_command, autopost_test_command
 
+from handlers.catalog_handler import (
+    catalog_command, search_command, addtocatalog_command,
+    review_command, catalogpriority_command, addcatalogreklama_command,
+    catalog_stats_users_command, catalog_stats_categories_command,
+    catalog_stats_popular_command, handle_catalog_callback, handle_catalog_text
+)
 # ============= HANDLERS - ИГРЫ =============
 from handlers.games_handler import (
     wordadd_command, wordedit_command, wordclear_command,
@@ -86,6 +92,7 @@ from services.admin_notifications import admin_notifications
 from services.stats_scheduler import stats_scheduler
 from services.channel_stats import channel_stats
 from services.db import db
+from services.catalog_service import catalog_service
 
 load_dotenv()
 
