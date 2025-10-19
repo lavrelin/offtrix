@@ -556,16 +556,16 @@ async def send_catalog_post_callback(query, context: ContextTypes.DEFAULT_TYPE,
                                     post: dict, index: int, total: int):
     """Отправить пост каталога через callback"""
     text = (
-        f"📋 **Запись {index}/{total}**\n\n"
-        f"📂 Категория: {post['category']}\n"
-        f"📝 {post['name']}\n\n"
-        f"🏷️ Теги: {', '.join(post['tags']) if post['tags'] else 'нет'}\n"
-        f"👁 Просмотров: {post['views']}"
+        f"🪽 **Запись {index}/{total}**\n\n"
+        f"💨 Категория: {post['category']}\n"
+        f"🌊 {post['name']}\n\n"
+        f"🌪️ Теги: {', '.join(post['tags']) if post['tags'] else 'нет'}\n"
+        f"🎬 Просмотров: {post['views']}"
     )
     
     keyboard = [
-        [InlineKeyboardButton("🔗 Перейти к посту", url=post['catalog_link'])],
-        [InlineKeyboardButton("💬 Оставить отзыв", callback_data=f"catalog:review:{post['id']}")]
+        [InlineKeyboardButton("💁🏼 К посту", url=post['catalog_link'])],
+        [InlineKeyboardButton("👱🏻‍♀️ Написать отзыв", callback_data=f"catalog:review:{post['id']}")]
     ]
     
     await context.bot.send_message(
