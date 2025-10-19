@@ -103,20 +103,20 @@ __all__ = [
     'help_command',
     'show_main_menu',
     'show_write_menu',
-
+    
     # Menu
     'handle_menu_callback',
-
+    
     # Publication
     'handle_publication_callback',
     'handle_text_input',
     'handle_media_input',
-
+    
     # Piar
     'handle_piar_callback',
     'handle_piar_text',
     'handle_piar_photo',
-
+    
     # Moderation (UNIFIED)
     'handle_moderation_callback',
     'handle_moderation_text',
@@ -128,20 +128,20 @@ __all__ = [
     'stats_command',
     'top_command',
     'lastseen_command',
-
+    
     # Profile
     'handle_profile_callback',
-
+    
     # Basic
     'id_command',
     'whois_command',
     'join_command',
     'participants_command',
     'report_command',
-
+    
     # Links
     'trixlinks_command',
-
+    
     # Advanced moderation
     'del_command',
     'purge_command',
@@ -151,16 +151,16 @@ __all__ = [
     'antiinvite_command',
     'tagall_command',
     'admins_command',
-
+    
     # Admin
     'admin_command',
     'say_command',
     'handle_admin_callback',
-
+    
     # Autopost
     'autopost_command',
     'autopost_test_command',
-
+    
     # Games
     'wordadd_command',
     'wordedit_command',
@@ -181,28 +181,28 @@ __all__ = [
     'handle_game_text_input',
     'handle_game_media_input',
     'handle_game_callback',
-
+    
     # Medicine
     'hp_command',
     'handle_hp_callback',
-
+    
     # Stats
     'channelstats_command',
     'fullstats_command',
     'resetmsgcount_command',
     'chatinfo_command',
-
+    
     # Help
     'trix_command',
     'handle_trix_callback',
-
+    
     # Social
     'social_command',
     'giveaway_command',
-
+    
     # Bonus
     'bonus_command',
-
+    
     # Catalog
     'catalog_command',
     'search_command',
