@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
 """
-Handler для каталога услуг - ПОЛНАЯ ВЕРСИЯ
+Handler для каталога услуг - ПОЛНАЯ ВЕРСИЯ С МЕДИА
 Команды: /catalog, /search, /addtocatalog, /review, /catalogpriority, /addcatalogreklama
 """
 import logging
+from typing import Optional, Dict, List
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 from config import Config
@@ -34,9 +35,15 @@ async def catalog_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
     
-    # Отправляем посты
+    # Отправляем посты С МЕДИА
     for i, post in enumerate(posts, 1):
-        await send_catalog_post(update, context, post, i, len(posts))
+        await send_catalog_post_with_media(
+            context.bot,
+            update.effective_chat.id,
+            post,
+            i,
+            len(posts)
+        )
     
     # Кнопки навигации
     keyboard = [
@@ -87,7 +94,7 @@ async def addtocatalog_command(update: Update, context: ContextTypes.DEFAULT_TYP
     
     text = (
         "🆕 **ДОБАВЛЕНИЕ В КАТАЛОГ УСЛУГ**\n\n"
-        "Шаг 1 из 4\n\n"
+        "Шаг 1 из 5\n\n"
         "⛓️ Отправьте ссылку на пост в Telegram-канале:\n"
         "Пример: https://t.me/catalogtrix/123"
     )
@@ -257,7 +264,13 @@ async def handle_catalog_callback(update: Update, context: ContextTypes.DEFAULT_
         await query.message.delete()
         
         for i, post in enumerate(posts, 1):
-            await send_catalog_post_callback(query, context, post, i, len(posts))
+            await send_catalog_post_with_media(
+                context.bot,
+                query.message.chat_id,
+                post,
+                i,
+                len(posts)
+            )
         
         keyboard = [
             [
@@ -332,7 +345,13 @@ async def handle_catalog_callback(update: Update, context: ContextTypes.DEFAULT_
         await query.message.delete()
         
         for i, post in enumerate(posts, 1):
-            await send_catalog_post_callback(query, context, post, i, len(posts))
+            await send_catalog_post_with_media(
+                context.bot,
+                query.message.chat_id,
+                post,
+                i,
+                len(posts)
+            )
         
         await context.bot.send_message(
             chat_id=query.message.chat_id,
@@ -352,9 +371,24 @@ async def handle_catalog_callback(update: Update, context: ContextTypes.DEFAULT_
         
         await query.edit_message_text(
             f"✅ Категория: {category}\n\n"
-            f"🚶‍♀️ Шаг 3 из 4\n\n"
+            f"🚶‍♀️ Шаг 3 из 5\n\n"
             f"📝 Введите название/описание:",
             parse_mode='Markdown'
+        )
+    
+    # ===== ПРОПУСК МЕДИА =====
+    elif action == "skip_media":
+        if 'catalog_add' not in context.user_data:
+            await query.answer("Ошибка: данные формы потеряны", show_alert=True)
+            return
+        
+        context.user_data['catalog_add']['step'] = 'tags'
+        
+        await query.edit_message_text(
+            "⏭️ Медиа пропущено\n\n"
+            "🏃🏻‍➡️ Последний пункт\n\n"
+            "#️⃣ Добавь теги через запятую (до 10):\n\n"
+            "Пример: жизнь, всегда, даёт, шансы"
         )
     
     # ===== ДЕЙСТВИЯ =====
@@ -406,7 +440,6 @@ async def handle_catalog_text(update: Update, context: ContextTypes.DEFAULT_TYPE
         data = context.user_data['catalog_add']
         step = data.get('step')
         
-        # 1️⃣ Ссылка
         if step == 'link':
             if not text.startswith('https://t.me/'):
                 await update.message.reply_text("🆖 Формат ссылки - повнимательней!")
@@ -423,183 +456,36 @@ async def handle_catalog_text(update: Update, context: ContextTypes.DEFAULT_TYPE
                 "🚶🏻‍➡️ Шаг 2 из 5\n\n📂 Выбор категории:",
                 reply_markup=InlineKeyboardMarkup(keyboard)
             )
-
-        # 2️⃣ Название
+        
         elif step == 'name':
             data['name'] = text[:255]
             data['step'] = 'media'
             
             keyboard = [[InlineKeyboardButton("⏭️ Пропустить медиа", callback_data="catalog:skip_media")]]
             
-            await update.message.reply_text(
-                "🚶‍♀️ Шаг 3 из 5\n\n"
-                "📸 Отправьте фото, видео или альбом:\n\n"
-                "💡 Это поможет клиентам увидеть вашу работу\n\n"
-                "Или нажмите 'Пропустить'",
-                reply_markup=InlineKeyboardMarkup(keyboard)
-            )
-
-        # 3️⃣ После медиа — добавление тегов
-        elif step == 'tags':
-            tags = [tag.strip() for tag in text.split(',')[:10]]
-            data['tags'] = tags
+            # Пытаемся автоматически получить медиа из ссылки
+            media_extracted = await extract_media_from_link(context.bot, data['link'])
             
-            post_id = await catalog_service.add_post(
-                user_id=user_id,
-                catalog_link=data['link'],
-                category=data['category'],
-                name=data['name'],
-                tags=tags,
-                media_file_id=data.get('media_file_id'),
-                media_type=data.get('media_type')
-            )
-            
-            context.user_data.pop('catalog_add', None)
-            
-            if post_id:
-                await update.message.reply_text(
-                    f"📇 **В каталог добавлена публикация**\n\n"
-                    f"📬 ID: {post_id}\n"
-                    f"📂 Категория: {data['category']}\n"
-                    f"🎚️ ХешТеги: {', '.join(tags)}",
-                    parse_mode='Markdown'
-                )
-            else:
-                await update.message.reply_text("➖ Произошла ошибка.")
-    
-    # 💬 Отзыв
-    elif 'catalog_review' in context.user_data:
-        review_data = context.user_data['catalog_review']
-        
-        if review_data.get('waiting'):
-            post_id = review_data['post_id']
-            
-            context.user_data.pop('catalog_review', None)
-            
-            await update.message.reply_text(
-                f"💾 **Отзыв сохранен!**\n\n"
-                f"🛀 Выражаем благодарность за вашу активность☑️",
-                parse_mode='Markdown'
-            )
-    
-    # 🔗 Приоритетные посты
-    elif 'catalog_priority' in context.user_data:
-        priority_data = context.user_data['catalog_priority']
-        
-        if priority_data.get('waiting'):
-            if text.startswith('https://t.me/'):
-                priority_data['links'].append(text)
+            if media_extracted:
+                # Медиа успешно извлечено
+                data['media_type'] = media_extracted['type']
+                data['media_file_id'] = media_extracted['file_id']
+                data['media_group_id'] = media_extracted.get('media_group_id')
+                data['media_json'] = media_extracted.get('media_json', [])
+                data['step'] = 'tags'
                 
-                count = len(priority_data['links'])
                 await update.message.reply_text(
-                    f"⛓️‍💥 Ссылка {count}/10 добавлена\n\n"
-                    f"Отправьте еще или нажмите 'Завершить'"
+                    f"✅ Медиа автоматически получено из поста!\n"
+                    f"📎 Тип: {media_extracted['type']}\n\n"
+                    "🏃🏻‍➡️ Последний пункт\n\n"
+                    "#️⃣ Добавь теги через запятую (до 10):\n\n"
+                    "Пример: маникюр, гель-лак, наращивание"
                 )
             else:
-                await update.message.reply_text("🙅🏼 Неверный формат ссылки")
-    
-    # 📢 Рекламный пост
-    elif 'catalog_ad' in context.user_data:
-        ad_data = context.user_data['catalog_ad']
-        step = ad_data.get('step')
-        
-        if step == 'link':
-            if not text.startswith('https://t.me/'):
-                await update.message.reply_text("🧷 Неверный формат ссылки")
-                return
-            
-            ad_data['link'] = text
-            ad_data['step'] = 'description'
-            
-            await update.message.reply_text(
-                "🏙️ Шаг 2 из 3\n\n"
-                "👩🏼‍💻 Добавьте описание рекламы:"
-            )
-        
-        elif step == 'description':
-            ad_data['description'] = text
-            ad_data['step'] = 'finish'
-            
-            post_id = await catalog_service.add_ad_post(
-                catalog_link=ad_data['link'],
-                description=ad_data['description']
-            )
-            
-            context.user_data.pop('catalog_ad', None)
-            
-            if post_id:
+                # Не удалось получить автоматически - предлагаем вручную
+                keyboard = [[InlineKeyboardButton("⏭️ Пропустить медиа", callback_data="catalog:skip_media")]]
+                
                 await update.message.reply_text(
-                    f"🌌 **Реклама добавлена!**\n\n"
-                    f"◻️ ID: {post_id}\n\n"
-                    f"▫️ Отображается каждые 10 постов",
-                    parse_mode='Markdown'
-                )
-            else:
-                await update.message.reply_text("💁🏻 ОШИБКА при добавлении")
-
-# ============= ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ =============
-
-async def send_catalog_post(update: Update, context: ContextTypes.DEFAULT_TYPE, 
-                           post: dict, index: int, total: int):
-    """Отправить пост каталога"""
-    text = (
-        f"🏙️ **Запись {index}/{total}**\n\n"
-        f"🏞️ Категория: {post['category']}\n"
-        f"🎑 {post['name']}\n\n"
-        f"🌌 Теги: {', '.join(post['tags']) if post['tags'] else 'нет'}\n"
-        f"🌠 Просмотров: {post['views']}"
-    )
-    
-    keyboard = [
-        [InlineKeyboardButton("🏃🏻‍♀️‍➡️ Перейти к посту", url=post['catalog_link'])],
-        [InlineKeyboardButton("🧑🏼‍💻 Оставить отзыв", callback_data=f"catalog:review:{post['id']}")]
-    ]
-    
-    await update.message.reply_text(
-        text,
-        reply_markup=InlineKeyboardMarkup(keyboard),
-        parse_mode='Markdown'
-    )
-    
-    await catalog_service.increment_views(post['id'])
-
-
-async def send_catalog_post_callback(query, context: ContextTypes.DEFAULT_TYPE, 
-                                    post: dict, index: int, total: int):
-    """Отправить пост каталога через callback"""
-    text = (
-        f"🪽 **Запись {index}/{total}**\n\n"
-        f"💨 Категория: {post['category']}\n"
-        f"🌊 {post['name']}\n\n"
-        f"🌪️ Теги: {', '.join(post['tags']) if post['tags'] else 'нет'}\n"
-        f"🎬 Просмотров: {post['views']}"
-    )
-    
-    keyboard = [
-        [InlineKeyboardButton("💁🏼 К посту", url=post['catalog_link'])],
-        [InlineKeyboardButton("👱🏻‍♀️ Написать отзыв", callback_data=f"catalog:review:{post['id']}")]
-    ]
-    
-    await context.bot.send_message(
-        chat_id=query.message.chat_id,
-        text=text,
-        reply_markup=InlineKeyboardMarkup(keyboard),
-        parse_mode='Markdown'
-    )
-    
-    await catalog_service.increment_views(post['id'])
-
-
-__all__ = [
-    'catalog_command',
-    'search_command',
-    'addtocatalog_command',
-    'review_command',
-    'catalogpriority_command',
-    'addcatalogreklama_command',
-    'catalog_stats_users_command',
-    'catalog_stats_categories_command',
-    'catalog_stats_popular_command',
-    'handle_catalog_callback',
-    'handle_catalog_text'
-]
+                    "⚠️ Не удалось автоматически получить медиа из поста\n\n"
+                    "🚶‍♀️ Шаг 4 из 5\n\n"
+                    "📸 Отправьте фото, видео, GIF или альбом вручную:\n\
