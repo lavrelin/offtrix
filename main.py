@@ -56,16 +56,13 @@ from handlers.autopost_handler import autopost_command, autopost_test_command
 from handlers.catalog_handler import (
     catalog_command, search_command, addtocatalog_command,
     review_command, catalogpriority_command, addcatalogreklama_command,
-    catalogview_command,
+    catalogviews_command,                  # ← ДОБАВЬТЕ ЭТУ СТРОКУ
     catalog_stats_users_command,
     catalog_stats_categories_command,
     catalog_stats_popular_command,
-    edit_catalog_command,
-    delete_catalog_command,
-    mycatalog_command,
-    handle_catalog_callback, handle_catalog_text,
-    handle_catalog_media
+    handle_catalog_callback, handle_catalog_text
 )
+
 # ============= HANDLERS - ИГРЫ =============
 from handlers.games_handler import (
     wordadd_command, wordedit_command, wordclear_command,
