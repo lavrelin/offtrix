@@ -55,6 +55,8 @@ class Post(Base):
     piar_description = Column(Text, nullable=True)
    # ============= КАТАЛОГ УСЛУГ =============
 
+# Добавить в models.py в класс CatalogPost:
+
 class CatalogPost(Base):
     """Запись в каталоге услуг"""
     __tablename__ = 'catalog_posts'
@@ -65,6 +67,12 @@ class CatalogPost(Base):
     category = Column(String(100), nullable=False)
     name = Column(String(255))
     tags = Column(JSON, default=list)
+    
+    # ============= НОВЫЕ ПОЛЯ ДЛЯ МЕДИА =============
+    media_type = Column(String(50), nullable=True)  # photo, video, animation, album
+    media_file_id = Column(String(500), nullable=True)  # file_id из Telegram
+    media_group_id = Column(String(255), nullable=True)  # для альбомов
+    media_json = Column(JSON, default=list, nullable=True)  # массив file_id для альбомов
     
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
