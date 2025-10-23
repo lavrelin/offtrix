@@ -1,4 +1,4 @@
-# handlers/__init__.py - ИСПРАВЛЕННЫЕ ИМПОРТЫ
+# handlers/__init__.py - ПОЛНАЯ ВЕРСИЯ С КАТАЛОГОМ
 
 from .start_handler import start_command, help_command, show_main_menu, show_write_menu
 from .menu_handler import handle_menu_callback
@@ -52,6 +52,8 @@ from .autopost_handler import (
     autopost_command, 
     autopost_test_command
 )
+
+# ============= КАТАЛОГ - ОБНОВЛЕННАЯ ВЕРСИЯ =============
 from .catalog_handler import (
     catalog_command,
     search_command,
@@ -59,12 +61,14 @@ from .catalog_handler import (
     review_command,
     catalogpriority_command,
     addcatalogreklama_command,
+    catalogviews_command,              # ← НОВАЯ КОМАНДА
     catalog_stats_users_command,
     catalog_stats_categories_command,
     catalog_stats_popular_command,
     handle_catalog_callback,
     handle_catalog_text
 )
+
 from .games_handler import (
     wordadd_command, 
     wordedit_command, 
@@ -161,6 +165,20 @@ __all__ = [
     'autopost_command',
     'autopost_test_command',
     
+    # Catalog - ОБНОВЛЕНО
+    'catalog_command',
+    'search_command',
+    'addtocatalog_command',
+    'review_command',
+    'catalogpriority_command',
+    'addcatalogreklama_command',
+    'catalogviews_command',            # ← НОВАЯ КОМАНДА
+    'catalog_stats_users_command',
+    'catalog_stats_categories_command',
+    'catalog_stats_popular_command',
+    'handle_catalog_callback',
+    'handle_catalog_text',
+    
     # Games
     'wordadd_command',
     'wordedit_command',
@@ -202,17 +220,4 @@ __all__ = [
     
     # Bonus
     'bonus_command',
-    
-    # Catalog
-    'catalog_command',
-    'search_command',
-    'addtocatalog_command',
-    'review_command',
-    'catalogpriority_command',
-    'addcatalogreklama_command',
-    'catalog_stats_users_command',
-    'catalog_stats_categories_command',
-    'catalog_stats_popular_command',
-    'handle_catalog_callback',
-    'handle_catalog_text'
 ]
