@@ -78,7 +78,14 @@ async def send_catalog_post_with_media(bot: Bot, chat_id: int, post: Dict, index
         
         tags = post.get('tags', [])
         if tags and isinstance(tags, list):
-            tags_formatted = [f"#{re.sub(r'[^\w\-]', '', str(t).replace(' ', '_'))}" for t in tags[:5] if t]
+            # Форматируем теги (нельзя использовать \w в f-string)
+            tags_formatted = []
+            for tag in tags[:5]:
+                if tag:
+                    clean_tag = re.sub(r'[^\w\-]', '', str(tag).replace(' ', '_'))
+                    if clean_tag:
+                        tags_formatted.append(f"#{clean_tag}")
+            
             if tags_formatted:
                 card_text += f"{' '.join(tags_formatted)}\n\n"
         
