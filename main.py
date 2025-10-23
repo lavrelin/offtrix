@@ -502,24 +502,15 @@ def main():
     application.add_handler(CommandHandler("search", search_command))
     application.add_handler(CommandHandler("addtocatalog", addtocatalog_command))
     application.add_handler(CommandHandler("review", review_command))
-    application.add_handler(CommandHandler("catalogview", catalogview_command))
-
-    # Catalog commands - Admin
-    application.add_handler(CommandHandler("catalog", catalog_command))
-    application.add_handler(CommandHandler("search", search_command))
-    application.add_handler(CommandHandler("addtocatalog", addtocatalog_command))
-    application.add_handler(CommandHandler("review", review_command))
-    application.add_handler(CommandHandler("mycatalog", mycatalog_command))
-
+    
     # Catalog commands - Admin
     application.add_handler(CommandHandler("catalogpriority", catalogpriority_command))
     application.add_handler(CommandHandler("addcatalogreklama", addcatalogreklama_command))
-    application.add_handler(CommandHandler("catalogview", catalogview_command))
+    application.add_handler(CommandHandler("catalogviews", catalogviews_command))  # ← НОВАЯ
     application.add_handler(CommandHandler("catalog_stats_users", catalog_stats_users_command))
     application.add_handler(CommandHandler("catalog_stats_categories", catalog_stats_categories_command))
     application.add_handler(CommandHandler("catalog_stats_popular", catalog_stats_popular_command))
-    application.add_handler(CommandHandler("editcatalog", edit_catalog_command))
-    application.add_handler(CommandHandler("deletecatalog", delete_catalog_command))
+
     
     # Stats commands
     application.add_handler(CommandHandler("channelstats", channelstats_command))
