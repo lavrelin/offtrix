@@ -55,11 +55,9 @@ from handlers.autopost_handler import autopost_command, autopost_test_command
 from handlers.catalog_handler import (
     catalog_command, search_command, addtocatalog_command,
     review_command, catalogpriority_command, addcatalogreklama_command,
-    catalog_stats_users_command, catalog_stats_categories_command,
-    catalog_stats_popular_command, handle_catalog_callback, handle_catalog_text,
-    handle_catalog_media  # ← ДОБАВЛЕНО ДЛЯ МЕДИА
+    catalogview_command,  # ← НОВАЯ!
+    handle_catalog_callback, handle_catalog_text, handle_catalog_media
 )
-
 # ============= HANDLERS - ИГРЫ =============
 from handlers.games_handler import (
     wordadd_command, wordedit_command, wordclear_command,
@@ -499,6 +497,7 @@ def main():
     application.add_handler(CommandHandler("search", search_command))
     application.add_handler(CommandHandler("addtocatalog", addtocatalog_command))
     application.add_handler(CommandHandler("review", review_command))
+    application.add_handler(CommandHandler("catalogview", catalogview_command))
 
     # Catalog commands - Admin
     application.add_handler(CommandHandler("catalogpriority", catalogpriority_command))
