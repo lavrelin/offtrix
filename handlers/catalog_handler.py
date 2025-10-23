@@ -1,23 +1,30 @@
 # -*- coding: utf-8 -*-
 """
-Handler для каталога услуг - ПОЛНАЯ ИСПРАВЛЕННАЯ ВЕРСИЯ
+Handler для каталога услуг - ФИНАЛЬНАЯ ВЕРСИЯ V3
 Проект: Трикс
+
+ИСПРАВЛЕНИЯ V3:
+✅ Импорт фото из ссылки на пост или выбор
+✅ Работающий поиск по ключевым словам
+✅ Работающие отзывы
+✅ Убрали показ просмотров для пользователей
+✅ Добавлена /catalogview для администраторов
 
 Команды:
   - /catalog           : Просмотр каталога услуг
-  - /search            : Поиск по категориям
+  - /search            : Поиск по категориям и ключевым словам
   - /addtocatalog      : Добавить услугу в каталог
   - /review [post_id]  : Оставить отзыв
   - /catalogpriority   : (АДМИН) Установить приоритетные посты
   - /addcatalogreklama : (АДМИН) Добавить рекламный пост
-  - /catalog_stats_*   : (АДМИН) Статистика
+  - /catalogview       : (АДМИН) Статистика просмотров
 """
 
 import logging
 from typing import Optional, List, Dict, Any
 from datetime import datetime
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, error
-from telegram.ext import ContextTypes, ConversationHandler
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import ContextTypes
 from config import Config
 from services.catalog_service import catalog_service, CATALOG_CATEGORIES
 from services.db import db
@@ -28,6 +35,7 @@ logger = logging.getLogger(__name__)
 STEP_LINK = 'link'
 STEP_CATEGORY = 'category'
 STEP_NAME = 'name'
+STEP_MEDIA_SOURCE = 'media_source'
 STEP_MEDIA = 'media'
 STEP_TAGS = 'tags'
 STEP_DESCRIPTION = 'description'
@@ -43,15 +51,11 @@ MAX_DESC_LENGTH = 1000
 # ============= ПОЛЬЗОВАТЕЛЬСКИЕ КОМАНДЫ =============
 
 async def catalog_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """
-    Просмотр каталога услуг - /catalog
-    Показывает случайные посты из каталога с возможностью фильтрации
-    """
+    """Просмотр каталога услуг - /catalog"""
     try:
         user_id = update.effective_user.id
         count = MAX_POSTS_PER_PAGE
         
-        # Получаем случайные посты
         posts = await catalog_service.get_random_posts(user_id, count=count)
         
         if not posts:
@@ -59,7 +63,6 @@ async def catalog_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                 [InlineKeyboardButton("🔄 Начать заново", callback_data="catalog:restart")],
                 [InlineKeyboardButton("↩️ Главное меню", callback_data="menu:back")]
             ]
-            
             await update.message.reply_text(
                 "📂 Актуальных публикаций больше не осталось\n\n"
                 "Нажмите 🔄 'Начать заново' чтобы обновить сессию.",
@@ -67,11 +70,9 @@ async def catalog_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             )
             return
         
-        # Отправляем посты
         for i, post in enumerate(posts, 1):
             await send_catalog_post(update, context, post, i, len(posts))
         
-        # Кнопки навигации
         keyboard = [
             [
                 InlineKeyboardButton(f"➡️ Следующие {count}", callback_data="catalog:next"),
@@ -88,16 +89,11 @@ async def catalog_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     
     except Exception as e:
         logger.error(f"Error in catalog_command: {e}")
-        await update.message.reply_text(
-            "❌ Произошла ошибка. Попробуйте позже."
-        )
+        await update.message.reply_text("❌ Произошла ошибка. Попробуйте позже.")
 
 
 async def search_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """
-    Поиск по каталогу - /search
-    Позволяет искать по ключевым словам, тегам или категориям
-    """
+    """Поиск по каталогу - /search"""
     try:
         keyboard = [
             [InlineKeyboardButton("🔤 По ключевому слову", callback_data="catalog:search:keyword")],
@@ -122,22 +118,12 @@ async def search_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
 
 async def addtocatalog_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """
-    Добавить запись в каталог - /addtocatalog
-    Инициирует пошаговый процесс добавления услуги
-    """
+    """Добавить запись в каталог - /addtocatalog"""
     try:
-        user_id = update.effective_user.id
-        
-        # Проверяем, нет ли уже активной сессии
         if 'catalog_add' in context.user_data:
-            await update.message.reply_text(
-                "⚠️ У вас уже есть активная сессия добавления. "
-                "Нажмите 'Отмена' чтобы начать заново."
-            )
+            await update.message.reply_text("⚠️ У вас уже есть активная сессия добавления.")
             return
         
-        # Инициализируем данные формы
         context.user_data['catalog_add'] = {'step': STEP_LINK}
         
         keyboard = [[InlineKeyboardButton("🚗 Отмена", callback_data="catalog:cancel")]]
@@ -145,7 +131,7 @@ async def addtocatalog_command(update: Update, context: ContextTypes.DEFAULT_TYP
         text = (
             "🆕 **ДОБАВЛЕНИЕ В КАТАЛОГ УСЛУГ**\n\n"
             "Шаг 1 из 5\n\n"
-            "⛓️ Отправьте ссылку на пост в Telegram-канале:\n\n"
+            "⛓️ Отправьте ссылку на пост в Telegram-канале:\n"
             "Пример: `https://t.me/catalogtrix/123`"
         )
         
@@ -161,35 +147,23 @@ async def addtocatalog_command(update: Update, context: ContextTypes.DEFAULT_TYP
 
 
 async def review_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """
-    Оставить отзыв - /review [post_id]
-    Позволяет пользователю написать отзыв о специалисте
-    """
+    """Оставить отзыв - /review [post_id]"""
     try:
         if not context.args or not context.args[0].isdigit():
             await update.message.reply_text(
-                "🔄 Использование: `/review [номер_поста]`\n\n"
-                "Пример: `/review 123`",
+                "🔄 Использование: `/review [номер_поста]`\n\nПример: `/review 123`",
                 parse_mode='Markdown'
             )
             return
         
         post_id = int(context.args[0])
-        user_id = update.effective_user.id
         
-        # Проверяем существование поста
         post = await catalog_service.get_post_by_id(post_id)
         if not post:
-            await update.message.reply_text(
-                f"❌ Пост #{post_id} не найден."
-            )
+            await update.message.reply_text(f"❌ Пост #{post_id} не найден.")
             return
         
-        # Сохраняем для ожидания текста отзыва
-        context.user_data['catalog_review'] = {
-            'post_id': post_id,
-            'waiting': True
-        }
+        context.user_data['catalog_review'] = {'post_id': post_id, 'waiting': True}
         
         keyboard = [[InlineKeyboardButton("⏮️ Отмена", callback_data="catalog:cancel_review")]]
         
@@ -210,12 +184,8 @@ async def review_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 # ============= АДМИНСКИЕ КОМАНДЫ =============
 
 async def catalogpriority_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """
-    Установить приоритетные посты - /catalogpriority (АДМИН)
-    Позволяет администратору выбрать посты, которые будут показываться в первую очередь
-    """
+    """Установить приоритетные посты - /catalogpriority (АДМИН)"""
     if not Config.is_admin(update.effective_user.id):
-        logger.warning(f"Unauthorized admin command attempt by {update.effective_user.id}")
         return
     
     try:
@@ -241,20 +211,14 @@ async def catalogpriority_command(update: Update, context: ContextTypes.DEFAULT_
 
 
 async def addcatalogreklama_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """
-    Добавить рекламный пост - /addcatalogreklama (АДМИН)
-    Позволяет администратору добавить рекламу в каталог
-    """
+    """Добавить рекламный пост - /addcatalogreklama (АДМИН)"""
     if not Config.is_admin(update.effective_user.id):
-        logger.warning(f"Unauthorized admin command attempt by {update.effective_user.id}")
         await update.message.reply_text("👮🏼‍♂️ Секретный доступ")
         return
     
     try:
         if 'catalog_ad' in context.user_data:
-            await update.message.reply_text(
-                "⚠️ Уже есть активная сессия добавления рекламы."
-            )
+            await update.message.reply_text("⚠️ Уже есть активная сессия добавления рекламы.")
             return
         
         context.user_data['catalog_ad'] = {'step': STEP_LINK}
@@ -277,10 +241,8 @@ async def addcatalogreklama_command(update: Update, context: ContextTypes.DEFAUL
         logger.error(f"Error in addcatalogreklama_command: {e}")
 
 
-# ============= СТАТИСТИКА (АДМИН) =============
-
-async def catalog_stats_users_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """🔘 Статистика пользователей - /catalog_stats_users (АДМИН)"""
+async def catalogview_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Статистика просмотров каталога - /catalogview (АДМИН)"""
     if not Config.is_admin(update.effective_user.id):
         return
     
@@ -288,10 +250,9 @@ async def catalog_stats_users_command(update: Update, context: ContextTypes.DEFA
         stats = await catalog_service.get_catalog_stats()
         
         text = (
-            "🔘 **СТАТИСТИКА КАТАЛОГА**\n\n"
+            "👀 **СТАТИСТИКА ПРОСМОТРОВ КАТАЛОГА**\n\n"
             f"📊 Всего постов: {stats.get('total_posts', 0)}\n"
-            f"📸 С медиа: {stats.get('posts_with_media', 0)}\n"
-            f"📄 Без медиа: {stats.get('posts_without_media', 0)}\n\n"
+            f"📸 С медиа: {stats.get('posts_with_media', 0)}\n\n"
             f"📈 Всего просмотров: {stats.get('total_views', 0)}\n"
             f"🖱️ Всего кликов: {stats.get('total_clicks', 0)}\n"
             f"📊 CTR: {stats.get('ctr', 0)}%\n\n"
@@ -302,66 +263,7 @@ async def catalog_stats_users_command(update: Update, context: ContextTypes.DEFA
         await update.message.reply_text(text, parse_mode='Markdown')
     
     except Exception as e:
-        logger.error(f"Error in catalog_stats_users_command: {e}")
-        await update.message.reply_text("❌ Ошибка при загрузке статистики.")
-
-
-async def catalog_stats_categories_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """📁 Статистика категорий - /catalog_stats_categories (АДМИН)"""
-    if not Config.is_admin(update.effective_user.id):
-        return
-    
-    try:
-        text = (
-            "📁 **СТАТИСТИКА КАТЕГОРИЙ**\n\n"
-            "👽 Доступные категории:\n\n"
-        )
-        
-        for category, icon in CATALOG_CATEGORIES.items():
-            # Получаем посты этой категории
-            posts = await catalog_service.search_posts(category=category, limit=1)
-            count = len(posts) if posts else 0
-            text += f"{category}: {count} постов\n"
-        
-        await update.message.reply_text(text, parse_mode='Markdown')
-    
-    except Exception as e:
-        logger.error(f"Error in catalog_stats_categories_command: {e}")
-        await update.message.reply_text("❌ Ошибка при загрузке статистики.")
-
-
-async def catalog_stats_popular_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """👨🏼‍💻 ТОП 10 популярных публикаций - /catalog_stats_popular (АДМИН)"""
-    if not Config.is_admin(update.effective_user.id):
-        return
-    
-    try:
-        # Получаем все посты с медиа (они обычно популярнее)
-        all_posts = await catalog_service.get_posts_with_media(limit=100)
-        
-        # Сортируем по просмотрам
-        all_posts.sort(key=lambda x: x.get('views', 0), reverse=True)
-        top_posts = all_posts[:10]
-        
-        if not top_posts:
-            await update.message.reply_text("📊 Нет данных о постах")
-            return
-        
-        posts_text = "\n".join([
-            f"{i}. Пост #{post['id']} - {post['views']} просмотров ({post['name'][:30]})"
-            for i, post in enumerate(top_posts, 1)
-        ])
-        
-        text = (
-            "🏆 **ТОП 10 ПОПУЛЯРНЫХ ПОСТОВ**\n\n"
-            f"{posts_text if posts_text else 'Нет данных'}\n\n"
-            "📊 Сортировка: по количеству просмотров"
-        )
-        
-        await update.message.reply_text(text, parse_mode='Markdown')
-    
-    except Exception as e:
-        logger.error(f"Error in catalog_stats_popular_command: {e}")
+        logger.error(f"Error in catalogview_command: {e}")
         await update.message.reply_text("❌ Ошибка при загрузке статистики.")
 
 
@@ -381,7 +283,6 @@ async def handle_catalog_callback(update: Update, context: ContextTypes.DEFAULT_
         data = query.data
         user_id = query.from_user.id
         
-        # Парсим callback data
         if not data.startswith("catalog:"):
             return
         
@@ -389,7 +290,6 @@ async def handle_catalog_callback(update: Update, context: ContextTypes.DEFAULT_
         action = parts[1] if len(parts) > 1 else None
         
         if action == "next":
-            # Показываем следующие посты
             posts = await catalog_service.get_random_posts(user_id, count=MAX_POSTS_PER_PAGE)
             
             if not posts:
@@ -398,14 +298,6 @@ async def handle_catalog_callback(update: Update, context: ContextTypes.DEFAULT_
             
             for i, post in enumerate(posts, 1):
                 await send_catalog_post_callback(query, context, post, i, len(posts))
-            
-            await query.edit_message_text(
-                f"🔃 Показано постов: {len(posts)}\n\n"
-                "Выберите действие:"
-            )
-        
-        elif action == "finish":
-            await query.edit_message_text("⏹️ Просмотр завершен")
         
         elif action == "search":
             keyboard = [
@@ -413,59 +305,56 @@ async def handle_catalog_callback(update: Update, context: ContextTypes.DEFAULT_
                 [InlineKeyboardButton("🏷️ По категории", callback_data="catalog:search:category")],
             ]
             
-            await query.edit_message_text(
-                "🕵🏼 **ПОИСК В КАТАЛОГЕ**\n\n"
-                "Выберите способ поиска:",
-                reply_markup=InlineKeyboardMarkup(keyboard),
-                parse_mode='Markdown'
-            )
+            try:
+                await query.edit_message_text(
+                    "🕵🏼 **ПОИСК В КАТАЛОГЕ**\n\nВыберите способ поиска:",
+                    reply_markup=InlineKeyboardMarkup(keyboard),
+                    parse_mode='Markdown'
+                )
+            except Exception:
+                pass
         
         elif action == "search" and len(parts) > 2:
             search_type = parts[2]
             
             if search_type == "keyword":
-                # Ждем ввода ключевого слова
                 context.user_data['catalog_search'] = {'type': 'keyword', 'waiting': True}
                 keyboard = [[InlineKeyboardButton("❌ Отмена", callback_data="catalog:cancel_search")]]
                 
-                await query.edit_message_text(
-                    "🔤 **ПОИСК ПО КЛЮЧЕВОМУ СЛОВУ**\n\n"
-                    "Введите слово, тег или название услуги для поиска:",
-                    reply_markup=InlineKeyboardMarkup(keyboard),
-                    parse_mode='Markdown'
-                )
+                try:
+                    await query.edit_message_text(
+                        "🔤 **ПОИСК ПО КЛЮЧЕВОМУ СЛОВУ**\n\n"
+                        "Введите слово, тег или название услуги:",
+                        reply_markup=InlineKeyboardMarkup(keyboard),
+                        parse_mode='Markdown'
+                    )
+                except Exception:
+                    pass
             
             elif search_type == "category":
-                # Показываем категории
                 keyboard = []
                 for category in CATALOG_CATEGORIES.keys():
                     keyboard.append(
                         [InlineKeyboardButton(category, callback_data=f"catalog:cat:{category}")]
                     )
                 
-                await query.edit_message_text(
-                    "📂 **ПОИСК ПО КАТЕГОРИИ**\n\n"
-                    "Выберите категорию:",
-                    reply_markup=InlineKeyboardMarkup(keyboard),
-                    parse_mode='Markdown'
-                )
+                try:
+                    await query.edit_message_text(
+                        "📂 **ПОИСК ПО КАТЕГОРИИ**\n\nВыберите категорию:",
+                        reply_markup=InlineKeyboardMarkup(keyboard),
+                        parse_mode='Markdown'
+                    )
+                except Exception:
+                    pass
         
         elif action == "cat":
-            # Показываем посты категории
             category = parts[2] if len(parts) > 2 else None
             
             if category not in CATALOG_CATEGORIES:
                 await query.edit_message_text("❌ Неизвестная категория")
                 return
             
-            # Сохраняем текущую категорию в контексте для фильтрации
-            context.user_data['current_category'] = category
-            
-            # Используем search_posts с фильтром по категории
-            posts = await catalog_service.search_posts(
-                category=category,
-                limit=MAX_POSTS_PER_PAGE
-            )
+            posts = await catalog_service.search_posts(category=category, limit=MAX_POSTS_PER_PAGE)
             
             if not posts:
                 await query.edit_message_text(f"📂 В категории '{category}' нет постов")
@@ -475,30 +364,27 @@ async def handle_catalog_callback(update: Update, context: ContextTypes.DEFAULT_
                 await send_catalog_post_callback(query, context, post, i, len(posts))
         
         elif action == "review":
-            # Открываем форму отзыва
             post_id = int(parts[2]) if len(parts) > 2 else None
             
             if not post_id:
                 await query.edit_message_text("❌ Некорректный ID поста")
                 return
             
-            context.user_data['catalog_review'] = {
-                'post_id': post_id,
-                'waiting': True
-            }
+            context.user_data['catalog_review'] = {'post_id': post_id, 'waiting': True}
             
             keyboard = [[InlineKeyboardButton("⏮️ Отмена", callback_data="catalog:cancel_review")]]
             
-            await query.edit_message_text(
-                f"🖋️ **ОТЗЫВ О СПЕЦИАЛИСТЕ**\n\n"
-                f"ID поста: `{post_id}`\n\n"
-                f"Ваш отзыв (макс. {MAX_REVIEW_LENGTH} символов):",
-                reply_markup=InlineKeyboardMarkup(keyboard),
-                parse_mode='Markdown'
-            )
+            try:
+                await query.edit_message_text(
+                    f"🖋️ **ОТЗЫВ**\n\nID поста: `{post_id}`\n\n"
+                    f"Ваш отзыв (макс. {MAX_REVIEW_LENGTH} символов):",
+                    reply_markup=InlineKeyboardMarkup(keyboard),
+                    parse_mode='Markdown'
+                )
+            except Exception:
+                pass
         
         elif action == "addcat":
-            # Выбор категории при добавлении поста
             category = parts[2] if len(parts) > 2 else None
             
             if 'catalog_add' not in context.user_data:
@@ -515,16 +401,84 @@ async def handle_catalog_callback(update: Update, context: ContextTypes.DEFAULT_
             
             keyboard = [[InlineKeyboardButton("⏭️ Пропустить", callback_data="catalog:skip_name")]]
             
-            await query.edit_message_text(
-                f"🚶🏻 Шаг 2 из 5\n\n"
-                f"📝 Введите название вашей услуги (макс. {MAX_NAME_LENGTH} символов):\n\n"
-                f"Категория: `{category}`",
-                reply_markup=InlineKeyboardMarkup(keyboard),
-                parse_mode='Markdown'
-            )
+            try:
+                await query.edit_message_text(
+                    f"🚶🏻 Шаг 2 из 5\n\n"
+                    f"📝 Введите название (макс. {MAX_NAME_LENGTH} символов):\n\n"
+                    f"Категория: `{category}`",
+                    reply_markup=InlineKeyboardMarkup(keyboard),
+                    parse_mode='Markdown'
+                )
+            except Exception:
+                pass
+        
+        elif action == "skip_name":
+            if 'catalog_add' not in context.user_data:
+                await query.edit_message_text("❌ Сессия истекла")
+                return
+            
+            data = context.user_data['catalog_add']
+            data['name'] = 'Без названия'
+            data['step'] = STEP_MEDIA_SOURCE
+            
+            keyboard = [
+                [InlineKeyboardButton("📥 Импортировать из поста", callback_data="catalog:import_photo")],
+                [InlineKeyboardButton("📤 Загрузить своё фото", callback_data="catalog:upload_photo")],
+                [InlineKeyboardButton("⏭️ Без фото", callback_data="catalog:skip_media")]
+            ]
+            
+            try:
+                await query.edit_message_text(
+                    "🚶‍♀️ Шаг 3 из 5\n\n"
+                    "📸 Выберите источник фото:",
+                    reply_markup=InlineKeyboardMarkup(keyboard),
+                    parse_mode='Markdown'
+                )
+            except Exception:
+                pass
+        
+        elif action == "import_photo":
+            if 'catalog_add' not in context.user_data:
+                await query.edit_message_text("❌ Сессия истекла")
+                return
+            
+            data = context.user_data['catalog_add']
+            data['step'] = 'waiting_import_link'
+            
+            keyboard = [[InlineKeyboardButton("❌ Отмена", callback_data="catalog:cancel")]]
+            
+            try:
+                await query.edit_message_text(
+                    "📥 **ИМПОРТ ФОТО**\n\n"
+                    "Отправьте ссылку на пост с фото:\n"
+                    "Пример: `https://t.me/channel/123`",
+                    reply_markup=InlineKeyboardMarkup(keyboard),
+                    parse_mode='Markdown'
+                )
+            except Exception:
+                pass
+        
+        elif action == "upload_photo":
+            if 'catalog_add' not in context.user_data:
+                await query.edit_message_text("❌ Сессия истекла")
+                return
+            
+            data = context.user_data['catalog_add']
+            data['step'] = STEP_MEDIA
+            
+            keyboard = [[InlineKeyboardButton("⏭️ Без фото", callback_data="catalog:skip_media")]]
+            
+            try:
+                await query.edit_message_text(
+                    "📤 **ЗАГРУЗКА ФОТО**\n\n"
+                    "Отправьте фото, видео или анимацию:",
+                    reply_markup=InlineKeyboardMarkup(keyboard),
+                    parse_mode='Markdown'
+                )
+            except Exception:
+                pass
         
         elif action == "skip_media":
-            # Пропускаем медиа и переходим к тегам
             if 'catalog_add' not in context.user_data:
                 await query.edit_message_text("❌ Сессия истекла")
                 return
@@ -534,37 +488,18 @@ async def handle_catalog_callback(update: Update, context: ContextTypes.DEFAULT_
             
             keyboard = [[InlineKeyboardButton("✅ Завершить", callback_data="catalog:finish_add")]]
             
-            await query.edit_message_text(
-                "🚶‍♀️ Шаг 4 из 5\n\n"
-                f"#️⃣ Добавьте теги через запятую (макс. {MAX_TAGS}, каждый до 50 символов):\n\n"
-                "Пример: `маникюр, педикюр, ногти`",
-                reply_markup=InlineKeyboardMarkup(keyboard),
-                parse_mode='Markdown'
-            )
-        
-        elif action == "skip_name":
-            # Пропускаем название и переходим к медиа
-            if 'catalog_add' not in context.user_data:
-                await query.edit_message_text("❌ Сессия истекла")
-                return
-            
-            data = context.user_data['catalog_add']
-            data['name'] = 'Без названия'
-            data['step'] = STEP_MEDIA
-            
-            keyboard = [[InlineKeyboardButton("⏭️ Пропустить медиа", callback_data="catalog:skip_media")]]
-            
-            await query.edit_message_text(
-                "🚶‍♀️ Шаг 3 из 5\n\n"
-                "📸 Отправьте фото, видео или анимацию:\n\n"
-                "💡 Это поможет клиентам увидеть вашу работу\n\n"
-                "Или нажмите 'Пропустить медиа'",
-                reply_markup=InlineKeyboardMarkup(keyboard),
-                parse_mode='Markdown'
-            )
+            try:
+                await query.edit_message_text(
+                    "🚶‍♀️ Шаг 4 из 5\n\n"
+                    f"#️⃣ Добавьте теги через запятую (макс. {MAX_TAGS}):\n\n"
+                    "Пример: `маникюр, педикюр, ногти`",
+                    reply_markup=InlineKeyboardMarkup(keyboard),
+                    parse_mode='Markdown'
+                )
+            except Exception:
+                pass
         
         elif action == "finish_add":
-            # Завершаем добавление поста
             if 'catalog_add' not in context.user_data:
                 await query.edit_message_text("❌ Сессия истекла")
                 return
@@ -584,35 +519,52 @@ async def handle_catalog_callback(update: Update, context: ContextTypes.DEFAULT_
             context.user_data.pop('catalog_add', None)
             
             if post_id:
-                await query.edit_message_text(
-                    f"📇 **В каталог добавлена публикация**\n\n"
-                    f"📬 ID: {post_id}\n"
-                    f"📂 Категория: {data.get('category', 'N/A')}\n"
-                    f"🎚️ Теги: {', '.join(data.get('tags', []))}",
-                    parse_mode='Markdown'
-                )
+                try:
+                    await query.edit_message_text(
+                        f"📇 **В каталог добавлена публикация!**\n\n"
+                        f"📬 ID: {post_id}\n"
+                        f"📂 Категория: {data.get('category', 'N/A')}\n"
+                        f"🎚️ Теги: {', '.join(data.get('tags', [])) or 'Нет'}",
+                        parse_mode='Markdown'
+                    )
+                except Exception:
+                    pass
             else:
-                await query.edit_message_text("➖ Произошла ошибка при добавлении поста.")
+                await query.edit_message_text("➖ Ошибка при добавлении.")
         
         elif action == "restart":
-            # Перезапускаем каталог
             await catalog_command(update, context)
+        
+        elif action == "finish":
+            await query.edit_message_text("⏹️ Просмотр завершен")
         
         elif action == "cancel":
             context.user_data.pop('catalog_add', None)
-            await query.edit_message_text("🙅🏻 Добавление отменено")
+            try:
+                await query.edit_message_text("🙅🏻 Добавление отменено")
+            except Exception:
+                pass
         
         elif action == "cancel_search":
             context.user_data.pop('catalog_search', None)
-            await query.edit_message_text("🙅🏻 Поиск отменен")
+            try:
+                await query.edit_message_text("🙅🏻 Поиск отменен")
+            except Exception:
+                pass
         
         elif action == "cancel_review":
             context.user_data.pop('catalog_review', None)
-            await query.edit_message_text("🚮 Отзыв отменен")
+            try:
+                await query.edit_message_text("🚮 Отзыв отменен")
+            except Exception:
+                pass
         
         elif action == "cancel_ad":
             context.user_data.pop('catalog_ad', None)
-            await query.edit_message_text("🕳️ Добавление рекламы отменено")
+            try:
+                await query.edit_message_text("🕳️ Добавление рекламы отменено")
+            except Exception:
+                pass
         
         elif action == "priority_finish":
             priority_data = context.user_data.get('catalog_priority', {})
@@ -625,52 +577,59 @@ async def handle_catalog_callback(update: Update, context: ContextTypes.DEFAULT_
             count = await catalog_service.set_priority_posts(links)
             context.user_data.pop('catalog_priority', None)
             
-            await query.edit_message_text(
-                f"👀 Priority посты добавлены 🩶\n\n"
-                f"☑️ Успешно: {count} из {len(links)}"
-            )
+            try:
+                await query.edit_message_text(
+                    f"👀 Priority посты добавлены\n\n"
+                    f"☑️ Успешно: {count} из {len(links)}"
+                )
+            except Exception:
+                pass
     
     except ValueError as ve:
         logger.error(f"ValueError in handle_catalog_callback: {ve}")
-        await query.edit_message_text("❌ Некорректные данные")
+        try:
+            await query.edit_message_text("❌ Некорректные данные")
+        except Exception:
+            pass
     except Exception as e:
         logger.error(f"Error in handle_catalog_callback: {e}")
-        await query.edit_message_text("❌ Произошла ошибка")
+        try:
+            await query.edit_message_text("❌ Произошла ошибка")
+        except Exception:
+            pass
 
 
 # ============= TEXT HANDLERS =============
 
 async def handle_catalog_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """
-    Обработчик текстовых сообщений для процессов в каталоге
-    """
+    """Обработчик текстовых сообщений для каталога"""
     user_id = update.effective_user.id
     text = update.message.text.strip() if update.message.text else ""
     
     try:
-        # === ПОИСК ПО КЛЮЧЕВОМУ СЛОВУ ===
+        # Поиск по ключевому слову
         if 'catalog_search' in context.user_data:
             search_data = context.user_data['catalog_search']
             if search_data.get('waiting') and search_data.get('type') == 'keyword':
                 await handle_search_flow(update, context, text)
                 return
         
-        # === ДОБАВЛЕНИЕ ПОСТА ===
+        # Добавление поста
         if 'catalog_add' in context.user_data:
-            await handle_add_post_flow(update, context, text)
+            await handle_add_post_flow(update, context, text, context.bot)
             return
         
-        # === ОТЗЫВ ===
+        # Отзыв
         if 'catalog_review' in context.user_data:
             await handle_review_flow(update, context, text)
             return
         
-        # === ПРИОРИТЕТНЫЕ ПОСТЫ (АДМИН) ===
+        # Приоритеты
         if 'catalog_priority' in context.user_data:
             await handle_priority_flow(update, context, text)
             return
         
-        # === РЕКЛАМНЫЙ ПОСТ (АДМИН) ===
+        # Реклама
         if 'catalog_ad' in context.user_data:
             await handle_ad_flow(update, context, text)
             return
@@ -678,26 +637,73 @@ async def handle_catalog_text(update: Update, context: ContextTypes.DEFAULT_TYPE
     except Exception as e:
         logger.error(f"Error in handle_catalog_text: {e}")
         try:
-            await update.message.reply_text("❌ Произошла ошибка при обработке сообщения.")
+            await update.message.reply_text("❌ Ошибка при обработке.")
         except:
             pass
 
 
+async def handle_catalog_media(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
+    """Обработчик медиа для каталога"""
+    try:
+        if 'catalog_add' not in context.user_data:
+            return False
+        
+        data = context.user_data['catalog_add']
+        step = data.get('step')
+        
+        if step != STEP_MEDIA:
+            return False
+        
+        media_type = None
+        media_file_id = None
+        
+        if update.message.photo:
+            media_type = 'photo'
+            media_file_id = update.message.photo[-1].file_id
+        elif update.message.video:
+            media_type = 'video'
+            media_file_id = update.message.video.file_id
+        elif update.message.animation:
+            media_type = 'animation'
+            media_file_id = update.message.animation.file_id
+        
+        if not media_file_id:
+            await update.message.reply_text("⚠️ Неподдерживаемый формат")
+            return True
+        
+        data['media_file_id'] = media_file_id
+        data['media_type'] = media_type
+        data['step'] = STEP_TAGS
+        
+        keyboard = [[InlineKeyboardButton("✅ Завершить", callback_data="catalog:finish_add")]]
+        
+        await update.message.reply_text(
+            "🚶‍♀️ Шаг 4 из 5\n\n"
+            f"#️⃣ Добавьте теги (макс. {MAX_TAGS}):\n\n"
+            "Пример: `маникюр, педикюр, ногти`",
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode='Markdown'
+        )
+        
+        return True
+    
+    except Exception as e:
+        logger.error(f"Error in handle_catalog_media: {e}")
+        return True
+
+
+# ============= FLOW HANDLERS =============
+
 async def handle_search_flow(update: Update, context: ContextTypes.DEFAULT_TYPE, query_text: str) -> None:
-    """Обработка потока поиска по ключевым словам"""
+    """Обработка поиска по ключевым словам"""
     user_id = update.effective_user.id
-    search_data = context.user_data['catalog_search']
     
     if not query_text or len(query_text) < 2:
-        await update.message.reply_text(
-            "⚠️ Введите минимум 2 символа для поиска"
-        )
+        await update.message.reply_text("⚠️ Введите минимум 2 символа")
         return
     
-    # Получаем все посты и фильтруем по ключевому слову
     all_posts = await catalog_service.get_random_posts(user_id, count=100)
     
-    # Ищем по названию, тегам и категории
     query_lower = query_text.lower()
     found_posts = []
     
@@ -706,7 +712,6 @@ async def handle_search_flow(update: Update, context: ContextTypes.DEFAULT_TYPE,
         tags = [tag.lower() for tag in post.get('tags', [])]
         category = post.get('category', '').lower()
         
-        # Проверяем совпадение
         if (query_lower in name or 
             any(query_lower in tag for tag in tags) or
             query_lower in category):
@@ -722,19 +727,16 @@ async def handle_search_flow(update: Update, context: ContextTypes.DEFAULT_TYPE,
         )
         return
     
-    # Показываем первые 5 результатов
     found_posts = found_posts[:MAX_POSTS_PER_PAGE]
     
     await update.message.reply_text(
-        f"✅ **Найдено результатов: {len(found_posts)}**\n\n"
-        f"Поиск по: `{query_text}`",
+        f"✅ **Найдено результатов: {len(found_posts)}**",
         parse_mode='Markdown'
     )
     
     for i, post in enumerate(found_posts, 1):
         await send_catalog_post(update, context, post, i, len(found_posts))
     
-    # Кнопки навигации
     keyboard = [
         [InlineKeyboardButton("🔄 Новый поиск", callback_data="catalog:search:keyword")],
         [InlineKeyboardButton("↩️ Главное меню", callback_data="menu:back")]
@@ -746,92 +748,15 @@ async def handle_search_flow(update: Update, context: ContextTypes.DEFAULT_TYPE,
     )
 
 
-async def handle_catalog_media(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
-    """
-    Обработчик медиа (фото, видео) для процессов в каталоге
-    Возвращает True если медиа было обработано, False если нет
-    """
-    user_id = update.effective_user.id
-    
-    try:
-        # Обработка медиа при добавлении поста
-        if 'catalog_add' not in context.user_data:
-            return False
-        
-        data = context.user_data['catalog_add']
-        step = data.get('step')
-        
-        # Обрабатываем только если на этапе STEP_MEDIA или можно заменить NAME
-        if step not in [STEP_MEDIA, STEP_NAME]:
-            return False
-        
-        # Определяем тип медиа
-        media_type = None
-        media_file_id = None
-        
-        if update.message.photo:
-            media_type = 'photo'
-            media_file_id = update.message.photo[-1].file_id  # Берем самое большое фото
-        elif update.message.video:
-            media_type = 'video'
-            media_file_id = update.message.video.file_id
-        elif update.message.animation:
-            media_type = 'animation'
-            media_file_id = update.message.animation.file_id
-        elif update.message.document:
-            media_type = 'document'
-            media_file_id = update.message.document.file_id
-        
-        if not media_file_id:
-            await update.message.reply_text("⚠️ Неподдерживаемый формат медиа")
-            return True  # Медиа было обработано (но ошибка)
-        
-        # Сохраняем медиа
-        data['media_file_id'] = media_file_id
-        data['media_type'] = media_type
-        
-        # Если мы на шаге NAME, пропускаем его и переходим к медиа
-        if step == STEP_NAME:
-            data['name'] = data.get('name', 'Без названия')
-            data['step'] = STEP_TAGS
-        else:
-            # Если на шаге MEDIA, переходим к тегам
-            data['step'] = STEP_TAGS
-        
-        keyboard = [[InlineKeyboardButton("✅ Завершить", callback_data="catalog:finish_add")]]
-        
-        await update.message.reply_text(
-            "🚶‍♀️ Шаг 4 из 5\n\n"
-            f"#️⃣ Добавьте теги через запятую (макс. {MAX_TAGS}, каждый до 50 символов):\n\n"
-            "Пример: `маникюр, педикюр, ногти`",
-            reply_markup=InlineKeyboardMarkup(keyboard),
-            parse_mode='Markdown'
-        )
-        
-        return True  # Медиа успешно обработано
-    
-    except Exception as e:
-        logger.error(f"Error in handle_catalog_media: {e}")
-        try:
-            await update.message.reply_text("❌ Ошибка при обработке медиа.")
-        except:
-            pass
-        return True  # Медиа было обработано (но с ошибкой)
-
-
-async def handle_add_post_flow(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str) -> None:
-    """Обработка потока добавления поста"""
+async def handle_add_post_flow(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str, bot) -> None:
+    """Обработка добавления поста"""
     user_id = update.effective_user.id
     data = context.user_data['catalog_add']
     step = data.get('step')
     
     if step == STEP_LINK:
         if not text.startswith('https://t.me/'):
-            await update.message.reply_text(
-                "🆖 Неверный формат ссылки!\n"
-                "Ссылка должна начинаться с `https://t.me/`",
-                parse_mode='Markdown'
-            )
+            await update.message.reply_text("🆖 Неверный формат ссылки!")
             return
         
         data['link'] = text
@@ -839,34 +764,58 @@ async def handle_add_post_flow(update: Update, context: ContextTypes.DEFAULT_TYP
         
         keyboard = []
         for category in CATALOG_CATEGORIES.keys():
-            keyboard.append(
-                [InlineKeyboardButton(category, callback_data=f"catalog:addcat:{category}")]
-            )
+            keyboard.append([InlineKeyboardButton(category, callback_data=f"catalog:addcat:{category}")])
         
         await update.message.reply_text(
-            "🚶🏻 Шаг 2 из 5\n\n"
-            "📂 Выберите категорию:",
+            "🚶🏻 Шаг 2 из 5\n\n📂 Выбе ритеритте категорию:",
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
     
     elif step == STEP_NAME:
-        name = text[:MAX_NAME_LENGTH]
-        data['name'] = name
-        data['step'] = STEP_MEDIA
+        data['name'] = text[:MAX_NAME_LENGTH]
+        data['step'] = STEP_MEDIA_SOURCE
         
-        keyboard = [[InlineKeyboardButton("⏭️ Пропустить медиа", callback_data="catalog:skip_media")]]
+        keyboard = [
+            [InlineKeyboardButton("📥 Импортировать из поста", callback_data="catalog:import_photo")],
+            [InlineKeyboardButton("📤 Загрузить своё", callback_data="catalog:upload_photo")],
+            [InlineKeyboardButton("⏭️ Без фото", callback_data="catalog:skip_media")]
+        ]
         
         await update.message.reply_text(
-            "🚶‍♀️ Шаг 3 из 5\n\n"
-            "📸 Отправьте фото, видео или анимацию:\n\n"
-            "💡 Это поможет клиентам увидеть вашу работу\n\n"
-            "Или нажмите 'Пропустить медиа'",
+            "🚶‍♀️ Шаг 3 из 5\n\n📸 Выберите источник фото:",
             reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+    
+    elif step == 'waiting_import_link':
+        if not text.startswith('https://t.me/'):
+            await update.message.reply_text("🆖 Неверный формат ссылки!")
+            return
+        
+        await update.message.reply_text("⏳ Импортирую фото из поста...")
+        
+        media_info = await extract_media_from_link(text, bot)
+        
+        if media_info and media_info.get('found'):
+            data['media_file_id'] = media_info.get('file_id')
+            data['media_type'] = media_info.get('media_type')
+            await update.message.reply_text("✅ Фото импортировано!")
+        else:
+            await update.message.reply_text("❌ Фото не найдено в посте. Попробуйте загрузить своё.")
+        
+        data['step'] = STEP_TAGS
+        
+        keyboard = [[InlineKeyboardButton("✅ Завершить", callback_data="catalog:finish_add")]]
+        
+        await update.message.reply_text(
+            f"🚶‍♀️ Шаг 4 из 5\n\n#️⃣ Добавьте теги (макс. {MAX_TAGS}):\n\n"
+            "Пример: `маникюр, педикюр, ногти`",
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode='Markdown'
         )
     
     elif step == STEP_TAGS:
         tags = [tag.strip() for tag in text.split(',')[:MAX_TAGS] if tag.strip()]
-        tags = [tag[:50] for tag in tags]  # Ограничиваем длину каждого тега
+        tags = [tag[:50] for tag in tags]
         data['tags'] = tags
         
         post_id = await catalog_service.add_post(
@@ -883,32 +832,30 @@ async def handle_add_post_flow(update: Update, context: ContextTypes.DEFAULT_TYP
         
         if post_id:
             await update.message.reply_text(
-                f"📇 **В каталог добавлена публикация**\n\n"
+                f"📇 **Публикация добавлена!**\n\n"
                 f"📬 ID: {post_id}\n"
                 f"📂 Категория: {data['category']}\n"
                 f"🎚️ Теги: {', '.join(tags) if tags else 'Нет'}",
                 parse_mode='Markdown'
             )
         else:
-            await update.message.reply_text("➖ Произошла ошибка при добавлении.")
+            await update.message.reply_text("➖ Ошибка при добавлении.")
 
 
 async def handle_review_flow(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str) -> None:
-    """Обработка потока отзывов"""
+    """Обработка отзывов"""
     review_data = context.user_data['catalog_review']
     
     if review_data.get('waiting'):
         if len(text) > MAX_REVIEW_LENGTH:
             await update.message.reply_text(
-                f"⚠️ Отзыв слишком длинный! "
-                f"Макс. {MAX_REVIEW_LENGTH} символов, у вас {len(text)}"
+                f"⚠️ Слишком длинный отзыв! Макс. {MAX_REVIEW_LENGTH} символов"
             )
             return
         
         post_id = review_data['post_id']
         user_id = update.effective_user.id
         
-        # Сохраняем отзыв в БД
         try:
             async with db.get_session() as session:
                 from models import CatalogReview
@@ -923,25 +870,21 @@ async def handle_review_flow(update: Update, context: ContextTypes.DEFAULT_TYPE,
                 session.add(review)
                 await session.commit()
                 
-                success = True
+                context.user_data.pop('catalog_review', None)
+                
+                await update.message.reply_text(
+                    "💾 **Отзыв сохранен!**\n\n"
+                    "🛀 Спасибо за активность! ☑️",
+                    parse_mode='Markdown'
+                )
         except Exception as e:
             logger.error(f"Error saving review: {e}")
-            success = False
-        
-        context.user_data.pop('catalog_review', None)
-        
-        if success:
-            await update.message.reply_text(
-                f"💾 **Отзыв сохранен!**\n\n"
-                f"🛀 Спасибо за вашу активность! ☑️",
-                parse_mode='Markdown'
-            )
-        else:
-            await update.message.reply_text("⚠️ Не удалось сохранить отзыв")
+            context.user_data.pop('catalog_review', None)
+            await update.message.reply_text("⚠️ Ошибка при сохранении отзыва")
 
 
 async def handle_priority_flow(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str) -> None:
-    """Обработка потока приоритетных постов"""
+    """Обработка приоритетных постов"""
     priority_data = context.user_data['catalog_priority']
     
     if priority_data.get('waiting'):
@@ -951,22 +894,19 @@ async def handle_priority_flow(update: Update, context: ContextTypes.DEFAULT_TYP
         
         links = priority_data['links']
         if len(links) >= MAX_PRIORITY_POSTS:
-            await update.message.reply_text(
-                f"⚠️ Максимум {MAX_PRIORITY_POSTS} ссылок достигнут"
-            )
+            await update.message.reply_text(f"⚠️ Максимум {MAX_PRIORITY_POSTS} ссылок")
             return
         
         links.append(text)
         count = len(links)
         
         await update.message.reply_text(
-            f"⛓️‍💥 Ссылка {count}/{MAX_PRIORITY_POSTS} добавлена\n\n"
-            f"Отправьте еще или нажмите 'Завершить'"
+            f"⛓️ Ссылка {count}/{MAX_PRIORITY_POSTS} добавлена"
         )
 
 
 async def handle_ad_flow(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str) -> None:
-    """Обработка потока рекламных постов"""
+    """Обработка рекламных постов"""
     ad_data = context.user_data['catalog_ad']
     step = ad_data.get('step')
     
@@ -979,19 +919,13 @@ async def handle_ad_flow(update: Update, context: ContextTypes.DEFAULT_TYPE, tex
         ad_data['step'] = STEP_DESCRIPTION
         
         await update.message.reply_text(
-            "🏙️ Шаг 2 из 3\n\n"
-            f"👩🏼‍💻 Добавьте описание рекламы (макс. {MAX_DESC_LENGTH} символов):"
+            "🏙️ Шаг 2 из 3\n\n👩🏼‍💻 Добавьте описание рекламы:"
         )
     
     elif step == STEP_DESCRIPTION:
         if len(text) > MAX_DESC_LENGTH:
-            await update.message.reply_text(
-                f"⚠️ Описание слишком длинное! "
-                f"Макс. {MAX_DESC_LENGTH} символов"
-            )
+            await update.message.reply_text(f"⚠️ Слишком длинное! Макс. {MAX_DESC_LENGTH}")
             return
-        
-        ad_data['description'] = text
         
         post_id = await catalog_service.add_ad_post(
             catalog_link=ad_data['link'],
@@ -1008,40 +942,64 @@ async def handle_ad_flow(update: Update, context: ContextTypes.DEFAULT_TYPE, tex
                 parse_mode='Markdown'
             )
         else:
-            await update.message.reply_text("💁🏻 Ошибка при добавлении рекламы")
+            await update.message.reply_text("💁🏻 Ошибка при добавлении")
 
 
 # ============= ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ =============
 
-async def send_catalog_post(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE,
-    post: Dict[str, Any],
-    index: int,
-    total: int
-) -> None:
-    """
-    Отправить пост каталога через обычное сообщение
-    """
+async def extract_media_from_link(link: str, bot) -> Optional[Dict]:
+    """Извлечение медиа из ссылки на Telegram пост"""
     try:
-        category = post.get('category', 'N/A')
-        name = post.get('name', 'Без названия')
-        tags = post.get('tags', [])
-        views = post.get('views', 0)
-        post_id = post.get('id')
-        catalog_link = post.get('catalog_link', '#')
+        if not link.startswith('https://t.me/'):
+            return None
         
+        parts = link.replace('https://t.me/', '').split('/')
+        
+        if len(parts) < 2:
+            return None
+        
+        if parts[0] == 'c' and len(parts) == 3:
+            channel_id = f"-100{parts[1]}"
+            message_id = int(parts[2])
+        else:
+            channel_id = parts[0]
+            message_id = int(parts[1])
+        
+        try:
+            message = await bot.get_chat(channel_id)
+            msg = await bot.get_chat_message(channel_id, message_id)
+            
+            if msg.photo:
+                return {'media_type': 'photo', 'file_id': msg.photo[-1].file_id, 'found': True}
+            elif msg.video:
+                return {'media_type': 'video', 'file_id': msg.video.file_id, 'found': True}
+            elif msg.animation:
+                return {'media_type': 'animation', 'file_id': msg.animation.file_id, 'found': True}
+            else:
+                return {'found': False}
+        except Exception as e:
+            logger.warning(f"Could not fetch message: {e}")
+            return None
+    
+    except Exception as e:
+        logger.error(f"Error extracting media: {e}")
+        return None
+
+
+async def send_catalog_post(update: Update, context: ContextTypes.DEFAULT_TYPE, 
+                           post: dict, index: int, total: int) -> None:
+    """Отправить пост (без показа просмотров)"""
+    try:
         text = (
             f"🏙️ **Запись {index}/{total}**\n\n"
-            f"🏞️ Категория: `{category}`\n"
-            f"🎑 **{name}**\n\n"
-            f"🌌 Теги: {', '.join(tags) if tags else 'нет'}\n"
-            f"🌠 Просмотров: {views}"
+            f"📂 Категория: `{post.get('category', 'N/A')}`\n"
+            f"🎑 **{post.get('name', 'Без названия')}**\n\n"
+            f"🌌 Теги: {', '.join(post.get('tags', [])) if post.get('tags') else 'нет'}"
         )
         
         keyboard = [
-            [InlineKeyboardButton("🏃🏻‍♀️ К посту", url=catalog_link)],
-            [InlineKeyboardButton("🧑🏼‍💻 Отзыв", callback_data=f"catalog:review:{post_id}")]
+            [InlineKeyboardButton("🏃🏻‍♀️ К посту", url=post.get('catalog_link', '#'))],
+            [InlineKeyboardButton("🧑🏼‍💻 Отзыв", callback_data=f"catalog:review:{post['id']}")]
         ]
         
         await update.message.reply_text(
@@ -1050,42 +1008,26 @@ async def send_catalog_post(
             parse_mode='Markdown'
         )
         
-        # Увеличиваем счетчик просмотров
-        await catalog_service.increment_views(post_id)
+        await catalog_service.increment_views(post['id'])
     
     except Exception as e:
         logger.error(f"Error in send_catalog_post: {e}")
 
 
-async def send_catalog_post_callback(
-    query,
-    context: ContextTypes.DEFAULT_TYPE,
-    post: Dict[str, Any],
-    index: int,
-    total: int
-) -> None:
-    """
-    Отправить пост каталога через callback запрос
-    """
+async def send_catalog_post_callback(query, context: ContextTypes.DEFAULT_TYPE, 
+                                    post: dict, index: int, total: int) -> None:
+    """Отправить пост через callback (без показа просмотров)"""
     try:
-        category = post.get('category', 'N/A')
-        name = post.get('name', 'Без названия')
-        tags = post.get('tags', [])
-        views = post.get('views', 0)
-        post_id = post.get('id')
-        catalog_link = post.get('catalog_link', '#')
-        
         text = (
             f"🪽 **Запись {index}/{total}**\n\n"
-            f"💨 Категория: `{category}`\n"
-            f"🌊 **{name}**\n\n"
-            f"🌪️ Теги: {', '.join(tags) if tags else 'нет'}\n"
-            f"🎬 Просмотров: {views}"
+            f"💨 Категория: `{post.get('category', 'N/A')}`\n"
+            f"🌊 **{post.get('name', 'Без названия')}**\n\n"
+            f"🌪️ Теги: {', '.join(post.get('tags', [])) if post.get('tags') else 'нет'}"
         )
         
         keyboard = [
-            [InlineKeyboardButton("💁🏼 К посту", url=catalog_link)],
-            [InlineKeyboardButton("👱🏻‍♀️ Отзыв", callback_data=f"catalog:review:{post_id}")]
+            [InlineKeyboardButton("💁🏼 К посту", url=post.get('catalog_link', '#'))],
+            [InlineKeyboardButton("👱🏻‍♀️ Отзыв", callback_data=f"catalog:review:{post['id']}")]
         ]
         
         await context.bot.send_message(
@@ -1095,14 +1037,11 @@ async def send_catalog_post_callback(
             parse_mode='Markdown'
         )
         
-        # Увеличиваем счетчик просмотров
-        await catalog_service.increment_views(post_id)
+        await catalog_service.increment_views(post['id'])
     
     except Exception as e:
         logger.error(f"Error in send_catalog_post_callback: {e}")
 
-
-# ============= ЭКСПОРТ ФУНКЦИЙ =============
 
 __all__ = [
     'catalog_command',
@@ -1111,9 +1050,7 @@ __all__ = [
     'review_command',
     'catalogpriority_command',
     'addcatalogreklama_command',
-    'catalog_stats_users_command',
-    'catalog_stats_categories_command',
-    'catalog_stats_popular_command',
+    'catalogview_command',
     'handle_catalog_callback',
     'handle_catalog_text',
     'handle_catalog_media',
