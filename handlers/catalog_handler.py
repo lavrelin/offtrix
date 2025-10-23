@@ -500,6 +500,27 @@ async def handle_catalog_callback(update: Update, context: ContextTypes.DEFAULT_
                 parse_mode='Markdown'
             )
         
+        elif action == "skip_name":
+            # Пропускаем название и переходим к медиа
+            if 'catalog_add' not in context.user_data:
+                await query.edit_message_text("❌ Сессия истекла")
+                return
+            
+            data = context.user_data['catalog_add']
+            data['name'] = 'Без названия'
+            data['step'] = STEP_MEDIA
+            
+            keyboard = [[InlineKeyboardButton("⏭️ Пропустить медиа", callback_data="catalog:skip_media")]]
+            
+            await query.edit_message_text(
+                "🚶‍♀️ Шаг 3 из 5\n\n"
+                "📸 Отправьте фото, видео или анимацию:\n\n"
+                "💡 Это поможет клиентам увидеть вашу работу\n\n"
+                "Или нажмите 'Пропустить медиа'",
+                reply_markup=InlineKeyboardMarkup(keyboard),
+                parse_mode='Markdown'
+            )
+        
         elif action == "finish_add":
             # Завершаем добавление поста
             if 'catalog_add' not in context.user_data:
@@ -574,30 +595,105 @@ async def handle_catalog_callback(update: Update, context: ContextTypes.DEFAULT_
 # ============= TEXT HANDLERS =============
 
 async def handle_catalog_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Обработчик текстовых сообщений для процессов в каталоге"""
+    """
+    Обработчик текстовых сообщений для процессов в каталоге
+    """
     user_id = update.effective_user.id
-    text = update.message.text.strip()
+    text = update.message.text.strip() if update.message.text else ""
     
     try:
         # === ДОБАВЛЕНИЕ ПОСТА ===
         if 'catalog_add' in context.user_data:
             await handle_add_post_flow(update, context, text)
+            return
         
         # === ОТЗЫВ ===
-        elif 'catalog_review' in context.user_data:
+        if 'catalog_review' in context.user_data:
             await handle_review_flow(update, context, text)
+            return
         
         # === ПРИОРИТЕТНЫЕ ПОСТЫ (АДМИН) ===
-        elif 'catalog_priority' in context.user_data:
+        if 'catalog_priority' in context.user_data:
             await handle_priority_flow(update, context, text)
+            return
         
         # === РЕКЛАМНЫЙ ПОСТ (АДМИН) ===
-        elif 'catalog_ad' in context.user_data:
+        if 'catalog_ad' in context.user_data:
             await handle_ad_flow(update, context, text)
+            return
     
     except Exception as e:
         logger.error(f"Error in handle_catalog_text: {e}")
-        await update.message.reply_text("❌ Произошла ошибка при обработке сообщения.")
+        try:
+            await update.message.reply_text("❌ Произошла ошибка при обработке сообщения.")
+        except:
+            pass
+
+
+async def handle_catalog_media(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
+    """
+    Обработчик медиа (фото, видео) для процессов в каталоге
+    Возвращает True если медиа было обработано, False если нет
+    """
+    user_id = update.effective_user.id
+    
+    try:
+        # Обработка медиа при добавлении поста
+        if 'catalog_add' not in context.user_data:
+            return False
+        
+        data = context.user_data['catalog_add']
+        step = data.get('step')
+        
+        # Обрабатываем только если на этапе STEP_MEDIA
+        if step != STEP_MEDIA:
+            return False
+        
+        # Определяем тип медиа
+        media_type = None
+        media_file_id = None
+        
+        if update.message.photo:
+            media_type = 'photo'
+            media_file_id = update.message.photo[-1].file_id  # Берем самое большое фото
+        elif update.message.video:
+            media_type = 'video'
+            media_file_id = update.message.video.file_id
+        elif update.message.animation:
+            media_type = 'animation'
+            media_file_id = update.message.animation.file_id
+        elif update.message.document:
+            media_type = 'document'
+            media_file_id = update.message.document.file_id
+        
+        if not media_file_id:
+            await update.message.reply_text("⚠️ Неподдерживаемый формат медиа")
+            return True  # Медиа было обработано (но ошибка)
+        
+        # Сохраняем медиа
+        data['media_file_id'] = media_file_id
+        data['media_type'] = media_type
+        data['step'] = STEP_TAGS
+        
+        keyboard = [[InlineKeyboardButton("✅ Завершить", callback_data="catalog:finish_add")]]
+        
+        await update.message.reply_text(
+            "🚶‍♀️ Шаг 4 из 5\n\n"
+            f"#️⃣ Добавьте теги через запятую (макс. {MAX_TAGS}, каждый до 50 символов):\n\n"
+            "Пример: `маникюр, педикюр, ногти`",
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode='Markdown'
+        )
+        
+        return True  # Медиа успешно обработано
+    
+    except Exception as e:
+        logger.error(f"Error in handle_catalog_media: {e}")
+        try:
+            await update.message.reply_text("❌ Ошибка при обработке медиа.")
+        except:
+            pass
+        return True  # Медиа было обработано (но с ошибкой)
 
 
 async def handle_add_post_flow(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str) -> None:
@@ -639,9 +735,9 @@ async def handle_add_post_flow(update: Update, context: ContextTypes.DEFAULT_TYP
         
         await update.message.reply_text(
             "🚶‍♀️ Шаг 3 из 5\n\n"
-            "📸 Отправьте фото, видео или альбом:\n\n"
+            "📸 Отправьте фото, видео или анимацию:\n\n"
             "💡 Это поможет клиентам увидеть вашу работу\n\n"
-            "Или нажмите 'Пропустить'",
+            "Или нажмите 'Пропустить медиа'",
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
     
@@ -884,4 +980,5 @@ __all__ = [
     'catalog_stats_popular_command',
     'handle_catalog_callback',
     'handle_catalog_text',
+    'handle_catalog_media',
 ]
