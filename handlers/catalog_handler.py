@@ -406,6 +406,7 @@ async def handle_catalog_text(update: Update, context: ContextTypes.DEFAULT_TYPE
         data = context.user_data['catalog_add']
         step = data.get('step')
         
+        # 1️⃣ Ссылка
         if step == 'link':
             if not text.startswith('https://t.me/'):
                 await update.message.reply_text("🆖 Формат ссылки - повнимательней!")
@@ -419,20 +420,26 @@ async def handle_catalog_text(update: Update, context: ContextTypes.DEFAULT_TYPE
                 keyboard.append([InlineKeyboardButton(category, callback_data=f"catalog:addcat:{category}")])
             
             await update.message.reply_text(
-                "🚶🏻‍➡️ Шаг 2 из 4\n\n📂 Выбор категории:",
+                "🚶🏻‍➡️ Шаг 2 из 5\n\n📂 Выбор категории:",
                 reply_markup=InlineKeyboardMarkup(keyboard)
             )
-        
+
+        # 2️⃣ Название
         elif step == 'name':
             data['name'] = text[:255]
-            data['step'] = 'tags'
+            data['step'] = 'media'
+            
+            keyboard = [[InlineKeyboardButton("⏭️ Пропустить медиа", callback_data="catalog:skip_media")]]
             
             await update.message.reply_text(
-                "🏃🏻‍➡️ Последний пункт\n\n"
-                "#️⃣ Добавь теги через запятую (до 10):\n\n"
-                "Пример: жизнь, всегда, даёт, шансы"
+                "🚶‍♀️ Шаг 3 из 5\n\n"
+                "📸 Отправьте фото, видео или альбом:\n\n"
+                "💡 Это поможет клиентам увидеть вашу работу\n\n"
+                "Или нажмите 'Пропустить'",
+                reply_markup=InlineKeyboardMarkup(keyboard)
             )
-        
+
+        # 3️⃣ После медиа — добавление тегов
         elif step == 'tags':
             tags = [tag.strip() for tag in text.split(',')[:10]]
             data['tags'] = tags
@@ -442,7 +449,9 @@ async def handle_catalog_text(update: Update, context: ContextTypes.DEFAULT_TYPE
                 catalog_link=data['link'],
                 category=data['category'],
                 name=data['name'],
-                tags=tags
+                tags=tags,
+                media_file_id=data.get('media_file_id'),
+                media_type=data.get('media_type')
             )
             
             context.user_data.pop('catalog_add', None)
@@ -458,7 +467,7 @@ async def handle_catalog_text(update: Update, context: ContextTypes.DEFAULT_TYPE
             else:
                 await update.message.reply_text("➖ Произошла ошибка.")
     
-    # Отзыв
+    # 💬 Отзыв
     elif 'catalog_review' in context.user_data:
         review_data = context.user_data['catalog_review']
         
@@ -473,7 +482,7 @@ async def handle_catalog_text(update: Update, context: ContextTypes.DEFAULT_TYPE
                 parse_mode='Markdown'
             )
     
-    # Приоритетные посты
+    # 🔗 Приоритетные посты
     elif 'catalog_priority' in context.user_data:
         priority_data = context.user_data['catalog_priority']
         
@@ -489,7 +498,7 @@ async def handle_catalog_text(update: Update, context: ContextTypes.DEFAULT_TYPE
             else:
                 await update.message.reply_text("🙅🏼 Неверный формат ссылки")
     
-    # Рекламный пост
+    # 📢 Рекламный пост
     elif 'catalog_ad' in context.user_data:
         ad_data = context.user_data['catalog_ad']
         step = ad_data.get('step')
@@ -527,7 +536,6 @@ async def handle_catalog_text(update: Update, context: ContextTypes.DEFAULT_TYPE
                 )
             else:
                 await update.message.reply_text("💁🏻 ОШИБКА при добавлении")
-
 
 # ============= ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ =============
 
