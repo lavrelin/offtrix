@@ -51,12 +51,15 @@ from handlers.advanced_moderation import (
 from handlers.admin_handler import admin_command, say_command, handle_admin_callback, broadcast_command, sendstats_command
 from handlers.autopost_handler import autopost_command, autopost_test_command
 
+# ============= HANDLERS - КАТАЛОГ С МЕДИА =============
 from handlers.catalog_handler import (
     catalog_command, search_command, addtocatalog_command,
     review_command, catalogpriority_command, addcatalogreklama_command,
     catalog_stats_users_command, catalog_stats_categories_command,
-    catalog_stats_popular_command, handle_catalog_callback, handle_catalog_text
+    catalog_stats_popular_command, handle_catalog_callback, handle_catalog_text,
+    handle_catalog_media  # ← ДОБАВЛЕНО ДЛЯ МЕДИА
 )
+
 # ============= HANDLERS - ИГРЫ =============
 from handlers.games_handler import (
     wordadd_command, wordedit_command, wordclear_command,
@@ -319,7 +322,7 @@ async def handle_all_callbacks(update: Update, context):
             await handle_rate_callback(update, context)
         elif handler_type == "rate_mod":
             await handle_rate_moderation_callback(update, context)
-        elif handler_type == "catalog":  # НОВОЕ
+        elif handler_type == "catalog":
             await handle_catalog_callback(update, context)
         else:
             await query.answer("⚠️ Неизвестная команда", show_alert=True)
@@ -332,7 +335,7 @@ async def handle_all_callbacks(update: Update, context):
 
 
 async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Main message handler - ИСПРАВЛЕННЫЙ"""
+    """Main message handler - С ПОДДЕРЖКОЙ МЕДИА КАТАЛОГА"""
     user_id = update.effective_user.id
     chat_id = update.effective_chat.id
     
@@ -375,13 +378,25 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 text = update.message.text or update.message.caption
                 await handle_piar_text(update, context, field, text)
             return
-            # Catalog text handler - НОВОЕ
+        
+        # ============= НОВОЕ: КАТАЛОГ С МЕДИА =============
+        # Проверяем медиа для каталога (ПРИОРИТЕТ)
+        if (update.message.photo or update.message.video or 
+            update.message.animation or update.message.document):
+            
+            # Пробуем обработать как медиа для каталога
+            if await handle_catalog_media(update, context):
+                logger.info(f"Media handled by catalog for user {user_id}")
+                return
+        
+        # Каталог text handler
         if ('catalog_add' in context.user_data or 
             'catalog_review' in context.user_data or
             'catalog_priority' in context.user_data or
             'catalog_ad' in context.user_data):
             await handle_catalog_text(update, context)
             return
+        # ============= КОНЕЦ НОВОГО БЛОКА =============
         
         # Rating handlers
         if waiting_for == 'rate_photo':
@@ -406,7 +421,7 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
     except Exception as e:
         logger.error(f"Error handling message: {e}", exc_info=True)
-        await update.message.reply_text("❌ Ошибка обработки")
+        await update.message.reply_text("❌ Произошла ошибка")
 
 async def error_handler(update: object, context):
     """Error handler"""
@@ -478,6 +493,7 @@ def main():
     application.add_handler(CommandHandler("say", say_command))
     application.add_handler(CommandHandler("broadcast", broadcast_command))
     application.add_handler(CommandHandler("sendstats", sendstats_command))
+    
     # Catalog commands - User
     application.add_handler(CommandHandler("catalog", catalog_command))
     application.add_handler(CommandHandler("search", search_command))
@@ -490,6 +506,7 @@ def main():
     application.add_handler(CommandHandler("catalog_stats_users", catalog_stats_users_command))
     application.add_handler(CommandHandler("catalog_stats_categories", catalog_stats_categories_command))
     application.add_handler(CommandHandler("catalog_stats_popular", catalog_stats_popular_command))
+    
     # Stats commands
     application.add_handler(CommandHandler("channelstats", channelstats_command))
     application.add_handler(CommandHandler("fullstats", fullstats_command))
@@ -586,6 +603,7 @@ def main():
     print(f"🔧 Admin group: {Config.ADMIN_GROUP_ID}")
     print(f"🚫 Budapest chat (IGNORE): {Config.BUDAPEST_CHAT_ID}")
     print(f"⏰ Cooldown: {Config.COOLDOWN_SECONDS // 3600}h")
+    print(f"📸 Catalog with media: ✅ Enabled")
     
     if db_initialized:
         print(f"💾 Database: ✅ Connected")
