@@ -25,6 +25,7 @@ from typing import Optional, List, Dict, Any
 from datetime import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
+from sqlalchemy import select, delete
 from config import Config
 from services.catalog_service import catalog_service, CATALOG_CATEGORIES
 from services.db import db
@@ -584,6 +585,143 @@ async def handle_catalog_callback(update: Update, context: ContextTypes.DEFAULT_
                 )
             except Exception:
                 pass
+        
+        # ============= РЕДАКТИРОВАНИЕ И УДАЛЕНИЕ =============
+        
+        elif action == "edit" and len(parts) > 2:
+            edit_type = parts[2]
+            post_id = int(parts[3]) if len(parts) > 3 else None
+            
+            if not post_id:
+                await query.edit_message_text("❌ Некорректный ID")
+                return
+            
+            post = await catalog_service.get_post_by_id(post_id)
+            if not post:
+                await query.edit_message_text("❌ Пост не найден")
+                return
+            
+            if edit_type == "name":
+                context.user_data['catalog_edit'] = {'post_id': post_id, 'type': 'name', 'waiting': True}
+                keyboard = [[InlineKeyboardButton("❌ Отмена", callback_data="catalog:cancel")]]
+                
+                try:
+                    await query.edit_message_text(
+                        f"📝 **РЕДАКТИРОВАНИЕ НАЗВАНИЯ**\n\n"
+                        f"Текущее: {post.get('name')}\n\n"
+                        f"Введите новое название:",
+                        reply_markup=InlineKeyboardMarkup(keyboard),
+                        parse_mode='Markdown'
+                    )
+                except Exception:
+                    pass
+            
+            elif edit_type == "tags":
+                context.user_data['catalog_edit'] = {'post_id': post_id, 'type': 'tags', 'waiting': True}
+                keyboard = [[InlineKeyboardButton("❌ Отмена", callback_data="catalog:cancel")]]
+                
+                try:
+                    await query.edit_message_text(
+                        f"🏷️ **РЕДАКТИРОВАНИЕ ТЕГОВ**\n\n"
+                        f"Текущие: {', '.join(post.get('tags', []))}\n\n"
+                        f"Введите новые теги через запятую:",
+                        reply_markup=InlineKeyboardMarkup(keyboard),
+                        parse_mode='Markdown'
+                    )
+                except Exception:
+                    pass
+            
+            elif edit_type == "media":
+                context.user_data['catalog_edit'] = {'post_id': post_id, 'type': 'media', 'waiting': True}
+                keyboard = [
+                    [InlineKeyboardButton("📥 Импортировать", callback_data=f"catalog:edit_import:{post_id}")],
+                    [InlineKeyboardButton("📤 Загрузить", callback_data="catalog:cancel")],
+                    [InlineKeyboardButton("❌ Отмена", callback_data="catalog:cancel")]
+                ]
+                
+                try:
+                    await query.edit_message_text(
+                        f"📸 **РЕДАКТИРОВАНИЕ МЕДИА**\n\n"
+                        f"Текущее: {post.get('media_type', 'Нет')}\n\n"
+                        f"Выберите действие:",
+                        reply_markup=InlineKeyboardMarkup(keyboard),
+                        parse_mode='Markdown'
+                    )
+                except Exception:
+                    pass
+        
+        elif action == "delete":
+            post_id = int(parts[2]) if len(parts) > 2 else None
+            
+            if not post_id:
+                await query.edit_message_text("❌ Некорректный ID")
+                return
+            
+            post = await catalog_service.get_post_by_id(post_id)
+            if not post:
+                await query.edit_message_text("❌ Пост не найден")
+                return
+            
+            keyboard = [
+                [
+                    InlineKeyboardButton("✅ Да", callback_data=f"catalog:confirm_delete:{post_id}"),
+                    InlineKeyboardButton("❌ Нет", callback_data="menu:back")
+                ]
+            ]
+            
+            try:
+                await query.edit_message_text(
+                    f"⚠️ **УДАЛИТЬ ПОСТ?**\n\n"
+                    f"🎑 {post.get('name')}\n"
+                    f"📂 {post.get('category')}\n\n"
+                    f"Это действие необратимо!",
+                    reply_markup=InlineKeyboardMarkup(keyboard),
+                    parse_mode='Markdown'
+                )
+            except Exception:
+                pass
+        
+        elif action == "confirm_delete":
+            post_id = int(parts[2]) if len(parts) > 2 else None
+            
+            if not post_id:
+                await query.edit_message_text("❌ Некорректный ID")
+                return
+            
+            try:
+                async with db.get_session() as session:
+                    from models import CatalogPost
+                    from sqlalchemy import delete
+                    
+                    await session.execute(delete(CatalogPost).where(CatalogPost.id == post_id))
+                    await session.commit()
+                
+                await query.edit_message_text(
+                    f"✅ **Пост #{post_id} удален!**"
+                )
+            except Exception as e:
+                logger.error(f"Error deleting post: {e}")
+                await query.edit_message_text("❌ Ошибка при удалении")
+        
+        elif action == "edit_import":
+            post_id = int(parts[2]) if len(parts) > 2 else None
+            
+            if not post_id:
+                await query.edit_message_text("❌ Некорректный ID")
+                return
+            
+            context.user_data['catalog_edit'] = {'post_id': post_id, 'type': 'media', 'waiting': True}
+            keyboard = [[InlineKeyboardButton("❌ Отмена", callback_data="catalog:cancel")]]
+            
+            try:
+                await query.edit_message_text(
+                    f"📥 **ИМПОРТ МЕДИА**\n\n"
+                    f"Отправьте ссылку на пост:",
+                    reply_markup=InlineKeyboardMarkup(keyboard),
+                    parse_mode='Markdown'
+                )
+            except Exception:
+                pass
     
     except ValueError as ve:
         logger.error(f"ValueError in handle_catalog_callback: {ve}")
@@ -607,6 +745,13 @@ async def handle_catalog_text(update: Update, context: ContextTypes.DEFAULT_TYPE
     text = update.message.text.strip() if update.message.text else ""
     
     try:
+        # Редактирование поста
+        if 'catalog_edit' in context.user_data:
+            edit_data = context.user_data['catalog_edit']
+            if edit_data.get('waiting'):
+                await handle_edit_flow(update, context, text)
+                return
+        
         # Поиск по ключевому слову
         if 'catalog_search' in context.user_data:
             search_data = context.user_data['catalog_search']
@@ -693,6 +838,86 @@ async def handle_catalog_media(update: Update, context: ContextTypes.DEFAULT_TYP
 
 
 # ============= FLOW HANDLERS =============
+
+async def handle_edit_flow(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str) -> None:
+    """Обработка редактирования постов"""
+    edit_data = context.user_data['catalog_edit']
+    edit_type = edit_data.get('type')
+    post_id = edit_data.get('post_id')
+    
+    if not edit_data.get('waiting'):
+        return
+    
+    try:
+        async with db.get_session() as session:
+            from models import CatalogPost
+            from sqlalchemy import select
+            
+            result = await session.execute(
+                select(CatalogPost).where(CatalogPost.id == post_id)
+            )
+            post = result.scalar_one_or_none()
+            
+            if not post:
+                await update.message.reply_text("❌ Пост не найден")
+                context.user_data.pop('catalog_edit', None)
+                return
+            
+            if edit_type == "name":
+                if len(text) > MAX_NAME_LENGTH:
+                    await update.message.reply_text(f"⚠️ Слишком длинное! Макс. {MAX_NAME_LENGTH}")
+                    return
+                
+                post.name = text
+                await session.commit()
+                
+                await update.message.reply_text(
+                    f"✅ **Название обновлено!**\n\n"
+                    f"📝 Новое название: {text}",
+                    parse_mode='Markdown'
+                )
+            
+            elif edit_type == "tags":
+                tags = [tag.strip() for tag in text.split(',')[:MAX_TAGS] if tag.strip()]
+                tags = [tag[:50] for tag in tags]
+                
+                post.tags = tags
+                await session.commit()
+                
+                await update.message.reply_text(
+                    f"✅ **Теги обновлены!**\n\n"
+                    f"🏷️ Новые теги: {', '.join(tags)}",
+                    parse_mode='Markdown'
+                )
+            
+            elif edit_type == "media":
+                if text.startswith('https://t.me/'):
+                    await update.message.reply_text("⏳ Импортирую медиа...")
+                    
+                    media_info = await extract_media_from_link(text, context.bot)
+                    
+                    if media_info and media_info.get('found'):
+                        post.media_file_id = media_info.get('file_id')
+                        post.media_type = media_info.get('media_type')
+                        await session.commit()
+                        
+                        await update.message.reply_text(
+                            f"✅ **Медиа обновлено!**\n\n"
+                            f"📸 Тип: {media_info.get('media_type')}",
+                            parse_mode='Markdown'
+                        )
+                    else:
+                        await update.message.reply_text("❌ Медиа не найдено в посте")
+                else:
+                    await update.message.reply_text("🆖 Неверный формат ссылки")
+            
+            context.user_data.pop('catalog_edit', None)
+    
+    except Exception as e:
+        logger.error(f"Error in handle_edit_flow: {e}")
+        await update.message.reply_text("❌ Ошибка при редактировании")
+        context.user_data.pop('catalog_edit', None)
+
 
 async def handle_search_flow(update: Update, context: ContextTypes.DEFAULT_TYPE, query_text: str) -> None:
     """Обработка поиска по ключевым словам"""
@@ -1043,6 +1268,225 @@ async def send_catalog_post_callback(query, context: ContextTypes.DEFAULT_TYPE,
         logger.error(f"Error in send_catalog_post_callback: {e}")
 
 
+# ============= УПРАВЛЕНИЕ КАТАЛОГОМ (АДМИН) =============
+
+async def catalog_stats_users_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Статистика пользователей каталога - /catalog_stats_users"""
+    if not Config.is_admin(update.effective_user.id):
+        return
+    
+    try:
+        stats = await catalog_service.get_catalog_stats()
+        
+        text = (
+            "📊 **СТАТИСТИКА КАТАЛОГА**\n\n"
+            f"📬 Всего постов: {stats.get('total_posts', 0)}\n"
+            f"📸 С медиа: {stats.get('posts_with_media', 0)}\n"
+            f"📄 Без медиа: {stats.get('posts_without_media', 0)}\n\n"
+            f"📈 Всего просмотров: {stats.get('total_views', 0)}\n"
+            f"🖱️ Кликов: {stats.get('total_clicks', 0)}\n"
+            f"📊 CTR: {stats.get('ctr', 0)}%\n\n"
+            f"👥 Активных сессий: {stats.get('active_sessions', 0)}"
+        )
+        
+        await update.message.reply_text(text, parse_mode='Markdown')
+    except Exception as e:
+        logger.error(f"Error in catalog_stats_users_command: {e}")
+        await update.message.reply_text("❌ Ошибка при загрузке статистики.")
+
+
+async def catalog_stats_categories_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Статистика по категориям - /catalog_stats_categories"""
+    if not Config.is_admin(update.effective_user.id):
+        return
+    
+    try:
+        text = "📁 **СТАТИСТИКА КАТЕГОРИЙ**\n\n"
+        
+        for category in CATALOG_CATEGORIES.keys():
+            posts = await catalog_service.search_posts(category=category, limit=1000)
+            count = len(posts)
+            text += f"{category}: {count} постов\n"
+        
+        await update.message.reply_text(text, parse_mode='Markdown')
+    except Exception as e:
+        logger.error(f"Error in catalog_stats_categories_command: {e}")
+        await update.message.reply_text("❌ Ошибка при загрузке статистики.")
+
+
+async def catalog_stats_popular_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """ТОП 10 популярных постов - /catalog_stats_popular"""
+    if not Config.is_admin(update.effective_user.id):
+        return
+    
+    try:
+        all_posts = await catalog_service.get_posts_with_media(limit=100)
+        
+        all_posts.sort(key=lambda x: x.get('views', 0), reverse=True)
+        top_posts = all_posts[:10]
+        
+        if not top_posts:
+            await update.message.reply_text("📊 Нет данных о постах")
+            return
+        
+        posts_text = "\n".join([
+            f"{i}. Пост #{post['id']} - {post['views']} просмотров ({post['name'][:30]})"
+            for i, post in enumerate(top_posts, 1)
+        ])
+        
+        text = (
+            "🏆 **ТОП 10 ПОПУЛЯРНЫХ ПОСТОВ**\n\n"
+            f"{posts_text}\n\n"
+            "📊 Сортировка: по просмотрам"
+        )
+        
+        await update.message.reply_text(text, parse_mode='Markdown')
+    except Exception as e:
+        logger.error(f"Error in catalog_stats_popular_command: {e}")
+        await update.message.reply_text("❌ Ошибка при загрузке статистики.")
+
+
+async def edit_catalog_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Редактировать пост каталога - /editcatalog [post_id]"""
+    if not Config.is_admin(update.effective_user.id):
+        return
+    
+    try:
+        if not context.args or not context.args[0].isdigit():
+            await update.message.reply_text(
+                "🔄 Использование: `/editcatalog [номер_поста]`\n\n"
+                "Пример: `/editcatalog 123`",
+                parse_mode='Markdown'
+            )
+            return
+        
+        post_id = int(context.args[0])
+        post = await catalog_service.get_post_by_id(post_id)
+        
+        if not post:
+            await update.message.reply_text(f"❌ Пост #{post_id} не найден.")
+            return
+        
+        keyboard = [
+            [InlineKeyboardButton("📝 Название", callback_data=f"catalog:edit:name:{post_id}")],
+            [InlineKeyboardButton("🏷️ Теги", callback_data=f"catalog:edit:tags:{post_id}")],
+            [InlineKeyboardButton("📸 Медиа", callback_data=f"catalog:edit:media:{post_id}")],
+            [InlineKeyboardButton("🗑️ Удалить", callback_data=f"catalog:delete:{post_id}")],
+            [InlineKeyboardButton("❌ Отмена", callback_data="menu:back")]
+        ]
+        
+        text = (
+            f"✏️ **РЕДАКТИРОВАНИЕ ПОСТА #{post_id}**\n\n"
+            f"📂 Категория: `{post.get('category')}`\n"
+            f"🎑 Название: {post.get('name')}\n"
+            f"🌌 Теги: {', '.join(post.get('tags', []))}\n"
+            f"📸 Медиа: {post.get('media_type', 'Нет')}\n\n"
+            f"Выберите что редактировать:"
+        )
+        
+        await update.message.reply_text(
+            text,
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode='Markdown'
+        )
+    
+    except Exception as e:
+        logger.error(f"Error in edit_catalog_command: {e}")
+        await update.message.reply_text("❌ Произошла ошибка.")
+
+
+async def delete_catalog_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Удалить пост каталога - /deletecatalog [post_id]"""
+    if not Config.is_admin(update.effective_user.id):
+        return
+    
+    try:
+        if not context.args or not context.args[0].isdigit():
+            await update.message.reply_text(
+                "🔄 Использование: `/deletecatalog [номер_поста]`\n\n"
+                "Пример: `/deletecatalog 123`",
+                parse_mode='Markdown'
+            )
+            return
+        
+        post_id = int(context.args[0])
+        
+        post = await catalog_service.get_post_by_id(post_id)
+        if not post:
+            await update.message.reply_text(f"❌ Пост #{post_id} не найден.")
+            return
+        
+        keyboard = [
+            [
+                InlineKeyboardButton("✅ Да, удалить", callback_data=f"catalog:confirm_delete:{post_id}"),
+                InlineKeyboardButton("❌ Отмена", callback_data="menu:back")
+            ]
+        ]
+        
+        text = (
+            f"⚠️ **ПОДТВЕРЖДЕНИЕ УДАЛЕНИЯ**\n\n"
+            f"🎑 Пост: {post.get('name')}\n"
+            f"📂 Категория: {post.get('category')}\n\n"
+            f"Вы уверены что хотите удалить этот пост?"
+        )
+        
+        await update.message.reply_text(
+            text,
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode='Markdown'
+        )
+    
+    except Exception as e:
+        logger.error(f"Error in delete_catalog_command: {e}")
+        await update.message.reply_text("❌ Произошла ошибка.")
+
+
+async def mycatalog_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Мои посты в каталоге - /mycatalog"""
+    try:
+        user_id = update.effective_user.id
+        
+        # Получаем все посты пользователя через поиск
+        all_posts = await catalog_service.get_random_posts(user_id, count=1000)
+        user_posts = [p for p in all_posts if p.get('user_id') == user_id]
+        
+        if not user_posts:
+            await update.message.reply_text(
+                "📂 У вас нет постов в каталоге.\n\n"
+                "Нажмите /addtocatalog чтобы добавить!"
+            )
+            return
+        
+        text = f"📋 **МОИ ПОСТЫ В КАТАЛОГЕ**\n\n" \
+               f"Всего постов: {len(user_posts)}\n\n"
+        
+        for post in user_posts[:10]:  # Показываем первые 10
+            text += (
+                f"📌 Пост #{post['id']}\n"
+                f"   🎑 {post.get('name', 'Без названия')}\n"
+                f"   📂 {post.get('category')}\n"
+                f"   📈 Просмотров: {post.get('views', 0)}\n\n"
+            )
+        
+        if len(user_posts) > 10:
+            text += f"... и еще {len(user_posts) - 10} постов"
+        
+        keyboard = [
+            [InlineKeyboardButton("✏️ Редактировать", callback_data="catalog:manage")],
+            [InlineKeyboardButton("↩️ Назад", callback_data="menu:back")]
+        ]
+        
+        await update.message.reply_text(
+            text,
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode='Markdown'
+        )
+    
+    except Exception as e:
+        logger.error(f"Error in mycatalog_command: {e}")
+        await update.message.reply_text("❌ Ошибка при загрузке.")
+
+
 __all__ = [
     'catalog_command',
     'search_command',
@@ -1051,6 +1495,12 @@ __all__ = [
     'catalogpriority_command',
     'addcatalogreklama_command',
     'catalogview_command',
+    'catalog_stats_users_command',
+    'catalog_stats_categories_command',
+    'catalog_stats_popular_command',
+    'edit_catalog_command',
+    'delete_catalog_command',
+    'mycatalog_command',
     'handle_catalog_callback',
     'handle_catalog_text',
     'handle_catalog_media',
