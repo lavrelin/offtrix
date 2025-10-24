@@ -29,7 +29,9 @@ from handlers.moderation_handler import (
 from handlers.rating_handler import (
     rate_start_command, toppeople_command, topboys_command, 
     topgirls_command, toppeoplereset_command, handle_rate_callback,
-    handle_rate_moderation_callback
+    handle_rate_moderation_callback,
+    handle_rate_photo,    # ← ДОБАВЬТЕ
+    handle_rate_profile   # ← ДОБАВЬТЕ
 )
 from handlers.profile_handler import handle_profile_callback
 from handlers.basic_handler import id_command, participants_command, report_command
@@ -56,11 +58,11 @@ from handlers.catalog_handler import (
     search_command, 
     addtocatalog_command,
     review_command, 
-    categoryfollow_command,              # ← НОВАЯ КОМАНДА
+    categoryfollow_command,
     catalogpriority_command, 
     addcatalogreklama_command,
     catalogviews_command,
-    catalogview_command,                 # ← НОВАЯ КОМАНДА
+    catalogview_command,
     catalog_stats_users_command,
     catalog_stats_categories_command,
     catalog_stats_popular_command,
@@ -70,6 +72,7 @@ from handlers.catalog_handler import (
     remove_catalog_command,
     handle_catalog_callback, 
     handle_catalog_text,
+    handle_catalog_media,  # ← ДОБАВЬТЕ ЭТУ СТРОКУ
     change_catalog_number_command,
     addgirltocat_command,
     addboytocat_command,
