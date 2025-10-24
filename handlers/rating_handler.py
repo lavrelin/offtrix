@@ -33,9 +33,9 @@ async def itsme_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [[InlineKeyboardButton("🚗 Отмена", callback_data="rate:cancel")]]
     
     text = (
-        "🍭 **СОЗДАНИЕ РЕЙТИНГА С ОПРОСОМ**\n\n"
+        "✅ **СОЗДАНИЕ РЕЙТИНГА С ОПРОСОМ**\n\n"
         "Начнем с фотографии\n\n"
-        "📸 Добавьте сюда своё ФОТО"
+        "👩‍❤️‍👨 Добавьте сюда своё ФОТО"
     )
     
     await update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
@@ -54,10 +54,10 @@ async def handle_rate_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [[InlineKeyboardButton("↩️ Возврат", callback_data="rate:back")]]
     
     text = (
-        "📩 Фото получено\n\n"
-        "💨 Следующий шаг\n\n"
-        "🌀 Отправьте ссылку на профиль или username\n"
-        "Пример: @username или https://instagram.com/username"
+        "✅ Фото добавлено\n\n"
+        "💁🏻 Следующий шаг\n\n"
+        "• Отправьте ссылку на профиль или username\n"
+        "Пример: 🌀username или https://instagram.com/username"
     )
     
     await update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
@@ -67,7 +67,7 @@ async def handle_rate_profile(update: Update, context: ContextTypes.DEFAULT_TYPE
     profile_url = update.message.text.strip()
     
     if not profile_url or len(profile_url) < 3:
-        await update.message.reply_text("👮‍♂️ Неверный формат ссылки")
+        await update.message.reply_text("🚔 Неверный формат ссылки")
         return
     
     if profile_url.startswith('@'):
@@ -85,14 +85,14 @@ async def handle_rate_profile(update: Update, context: ContextTypes.DEFAULT_TYPE
             InlineKeyboardButton("🦸‍♀️ Girl", callback_data="rate:gender:girl")
         ],
         [
-            InlineKeyboardButton("👬 Непонятно", callback_data="rate:gender:unknown"),
+            InlineKeyboardButton("❓ Непонятно", callback_data="rate:gender:unknown"),
             InlineKeyboardButton("↩️ Назад", callback_data="rate:back")
         ]
     ]
     
     text = (
-        "🌀Profile: " + profile_url + "\n\n"
-        "Последний пункт\n\n"
+        "🪪 Profile: " + profile_url + "\n\n"
+        "Укажите пол\n\n"
         "🕺М? /💃Ж? "
     )
     
@@ -123,13 +123,13 @@ async def handle_rate_callback(update: Update, context: ContextTypes.DEFAULT_TYP
             context.user_data['waiting_for'] = 'rate_photo'
             keyboard = [[InlineKeyboardButton("🚗 Отмена", callback_data="rate:cancel")]]
             await query.edit_message_text(
-                "🍭Прикрепите своё лучшее фото",
+                "🧑🏼‍💻 Добавьте своё лучшее фото",
                 reply_markup=InlineKeyboardMarkup(keyboard)
             )
         elif step == 'gender':
             context.user_data['rate_step'] = 'profile'
             context.user_data['waiting_for'] = 'rate_profile'
-            keyboard = [[InlineKeyboardButton("🔙 Вернуться", callback_data="rate:back")]]
+            keyboard = [[InlineKeyboardButton("⬅️ Назад", callback_data="rate:back")]]
             await query.edit_message_text(
                 "🔗 Отправьте ссылку на профиль",
                 reply_markup=InlineKeyboardMarkup(keyboard)
@@ -186,11 +186,11 @@ async def publish_rate_post(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data.pop('rate_step', None)
         
         await update.callback_query.edit_message_text(
-            f"🌟 **Пост отправлен на модерацию!**\n\n"
-            f"🖤 Профиль: {profile_url}\n"
+            f"✅ **Пост отправлен на модерацию!**\n\n"
+            f"🪪 Профиль: {profile_url}\n"
             f"👩‍❤️‍👨 Пол: {gender.upper()}\n"
-            f"#️⃣ Post🆔: {post_id}\n\n"
-            f"✨ Проверка, ожидайте ",
+            f"#️⃣ Post iD: {post_id}\n\n"
+            f"🤳🏼 Проверка, ожидайте ",
             parse_mode='Markdown'
         )
         
@@ -213,12 +213,12 @@ async def send_rating_to_moderation(update: Update, context: ContextTypes.DEFAUL
         ]
         
         caption = (
-            f"🎇 **Новая заявка 🍭RATEPEOPLE уже на модерации (Rating)**\n\n"
+            f"🚨 **Новая заявка ✉️ от ⭐️TopPeople уже на модерации (Rating)**\n\n"
             f"🪪 Профиль: {profile_url}\n"
-            f"🎑 Пол: {gender.upper()}\n"
+            f"👩‍❤️‍👨 Пол: {gender.upper()}\n"
             f"📇 Post ID: {post_id}\n"
-            f"🌁 Дата: {datetime.now().strftime('%d.%m.%Y %H:%M')}\n\n"
-            f"🕳️ Ваше действие:"
+            f"🗓️ Дата: {datetime.now().strftime('%d.%m.%Y %H:%M')}\n\n"
+            f"❓ Ваше действие:"
         )
         
         msg = await bot.send_photo(
@@ -280,10 +280,10 @@ async def approve_rating_post(update: Update, context: ContextTypes.DEFAULT_TYPE
                 InlineKeyboardButton("👍 +1 (0)", callback_data=f"rate:vote:{post_id}:1"),
                 InlineKeyboardButton("🔥 +2 (0)", callback_data=f"rate:vote:{post_id}:2"),
             ],
-            [InlineKeyboardButton(f"📊 Score: 0 | Votes: 0", callback_data="rate:noop")]
+            [InlineKeyboardButton(f"⭐️ Score: 0 | Votes: 0", callback_data="rate:noop")]
         ]
         
-        caption = f"🍭 Rate {profile_url}\n\n👥 Gender: {gender.upper()}\n\n👇 Выберите оценку"
+        caption = f"👍 Оценка 👎 {profile_url}\n\n👫 Gender: {gender.upper()}\n\n👩🏻‍⚖️ Выберите оценку"
         
         msg = await context.bot.send_photo(
             chat_id=BUDAPEST_PEOPLE_ID,
@@ -301,7 +301,7 @@ async def approve_rating_post(update: Update, context: ContextTypes.DEFAULT_TYPE
         new_caption = (
             f"{query.message.caption}\n\n"
             f"✅ **ОДОБРЕНО И ОПУБЛИКОВАНО**\n"
-            f"В 🛜 SocialMedia 🦹🏻People in Budapest 🇭🇺"
+            f"В 🏆 Top Budapest / Взаимные❤️💬➡️ / Люди Будапешт"
         )
         
         await query.edit_message_caption(
@@ -390,7 +390,7 @@ async def handle_vote(update: Update, context: ContextTypes.DEFAULT_TYPE, post_i
                 InlineKeyboardButton(f"👍 +1 ({stats['1']})", callback_data=f"rate:vote:{post_id}:1"),
                 InlineKeyboardButton(f"🔥 +2 ({stats['2']})", callback_data=f"rate:vote:{post_id}:2"),
             ],
-            [InlineKeyboardButton(f"🎢 Score: {profile['total_score']} | Votes: {profile['vote_count']}", 
+            [InlineKeyboardButton(f"⭐️ Score: {profile['total_score']} | Votes: {profile['vote_count']}", 
                                 callback_data="rate:noop")]
         ]
         
@@ -434,14 +434,14 @@ async def toppeople_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reverse=True
     )[:10]
     
-    text = "💫 **TOPinBUDAPEST**\n\n"
+    text = "⭐️ **TOPinBUDAPEST**\n\n"
     
     for i, (profile_url, data) in enumerate(sorted_profiles, 1):
         text += (
             f"{i}. **{profile_url}**\n"
-            f"   💯 Очки: {data['total_score']}\n"
-            f"   🌈 Оценок: {data['vote_count']}\n"
-            f"   👩‍❤️‍👨 Пол: {data['gender'].upper()}\n\n"
+            f"   ⭐️ Рейтинг: {data['total_score']}\n"
+            f"   👩🏻‍⚖️ Оценок: {data['vote_count']}\n"
+            f"   👩🏼‍🤝‍👨🏻 Пол: {data['gender'].upper()}\n\n"
         )
     
     await update.message.reply_text(text, parse_mode='Markdown')
