@@ -33,9 +33,9 @@ async def itsme_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [[InlineKeyboardButton("🚗 Отмена", callback_data="rate:cancel")]]
     
     text = (
-        "⭐️ **Анкета в TopPeople Budapest**\n\n"
-        "Начнем с фотографии. Добавь своё лучшее фото\n\n"
-        "😳 Покажи себя, увелич активность своего 🌀аккаунта "
+        "⭐️ **Анкета в ❤️ TopPeople Budapest**\n\n"
+        "Начнем хайпить. Добавь фото\n\n"
+        "😳 Покажи себя, подними активность своего 🌀аккаунта "
     )
     
     await update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
@@ -44,14 +44,14 @@ async def itsme_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_rate_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработка фото для опроса"""
     if not update.message.photo:
-        await update.message.reply_text("🕳️ Отправьте фотографию")
+        await update.message.reply_text("👻 Отправьте фотографию")
         return
     
     context.user_data['rate_photo_file_id'] = update.message.photo[-1].file_id
     context.user_data['rate_step'] = 'profile'
     context.user_data['waiting_for'] = 'rate_profile'
     
-    keyboard = [[InlineKeyboardButton("↩️ Возврат", callback_data="rate:back")]]
+    keyboard = [[InlineKeyboardButton("↩️ Назад", callback_data="rate:back")]]
     
     text = (
         "✅ Фото добавлено\n\n"
@@ -93,7 +93,7 @@ async def handle_rate_profile(update: Update, context: ContextTypes.DEFAULT_TYPE
     text = (
         "🪪 Profile: " + profile_url + "\n\n"
         "Укажите пол\n\n"
-        "🕺М? /💃Ж? "
+        "🙋🏼‍♂️ Man? /🙋🏼‍♀️ Girl? "
     )
     
     await update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
@@ -186,11 +186,11 @@ async def publish_rate_post(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data.pop('rate_step', None)
         
         await update.callback_query.edit_message_text(
-            f"✅ **Пост отправлен на модерацию!**\n\n"
-            f"🪪 Профиль: {profile_url}\n"
-            f"👩‍❤️‍👨 Пол: {gender.upper()}\n"
+            f"✅ **Пост отправлен!**\n\n"
+            f"🪪 Аккаунт: {profile_url}\n"
+            f"👩🏻‍🤝‍👨🏼 Пол: {gender.upper()}\n"
             f"#️⃣ Post iD: {post_id}\n\n"
-            f"🤳🏼 Проверка, ожидайте ",
+            f"🙄 Проверка...",
             parse_mode='Markdown'
         )
         
@@ -213,7 +213,7 @@ async def send_rating_to_moderation(update: Update, context: ContextTypes.DEFAUL
         ]
         
         caption = (
-            f"🚨 **Новая заявка ✉️ от ⭐️TopPeople уже на модерации (Rating)**\n\n"
+            f"🚨 **🆕 заявка от ⭐️TopPeople**\n\n"
             f"🪪 Профиль: {profile_url}\n"
             f"👩‍❤️‍👨 Пол: {gender.upper()}\n"
             f"📇 Post ID: {post_id}\n"
