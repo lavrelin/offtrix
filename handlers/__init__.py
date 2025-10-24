@@ -195,8 +195,6 @@ __all__ = [
     'catalog_stats_popular_command',
     'handle_catalog_callback',
     'handle_catalog_text',
-    __all__ = [
-    # ... существующие ...
     
     # Catalog v2.0
     'mysubscriptions_command',
