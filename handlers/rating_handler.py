@@ -23,8 +23,8 @@ rating_data = {
 
 # ============= ОСНОВНЫЕ КОМАНДЫ =============
 
-async def rate_start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Начать процесс публикации фото с опросом - /ratestart"""
+async def itsme_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Начать процесс публикации фото с опросом - /itsme"""
     if not Config.is_admin(update.effective_user.id):
         await update.message.reply_text("🤣 Только админы могут создавать опросы")
         return
@@ -502,7 +502,7 @@ async def toppeoplereset_command(update: Update, context: ContextTypes.DEFAULT_T
     await update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
 
 __all__ = [
-    'rate_start_command',
+    'itsme_command',
     'handle_rate_photo',
     'handle_rate_profile',
     'handle_rate_callback',
