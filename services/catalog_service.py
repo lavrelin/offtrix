@@ -1,4 +1,4 @@
-cat > /mnt/user-data/outputs/catalog_service_FULL.py << 'ENDOFFILE'
+
 # -*- coding: utf-8 -*-
 """
 Сервис для работы с каталогом услуг - ПОЛНАЯ ВЕРСИЯ 4.0
