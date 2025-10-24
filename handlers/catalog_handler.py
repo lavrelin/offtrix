@@ -1,15 +1,15 @@
 # -*- coding: utf-8 -*-
 """
-Handler для каталога услуг - ИСПРАВЛЕННАЯ ВЕРСИЯ 3.1
+Handler для каталога услуг - ОБНОВЛЕННАЯ ВЕРСИЯ 3.2
 
-Исправления:
-- ✅ Исправлен callback catalog:add_cat
-- ✅ Добавлена система выбора звезд для отзывов
-- ✅ Уникальные номера постов 1-9999
-- ✅ Новый формат карточек с номером и рейтингом
-- ✅ Команда изменения номера (админ)
+Обновления:
+- ✅ Новые команды /addgirltocat и /addboytocat
+- ✅ Улучшенный импорт медиа с уведомлениями
+- ✅ Обновленный поиск только по словам и тегам
+- ✅ Смешанная выдача постов (4 обычных + 1 Top)
+- ✅ Уведомления админу при новых отзывах
 
-Версия: 3.1.0
+Версия: 3.2.0
 Дата: 24.10.2025
 """
 import logging
@@ -28,14 +28,20 @@ logger = logging.getLogger(__name__)
 # ============= ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ =============
 
 async def extract_media_from_link(bot: Bot, telegram_link: str) -> Optional[Dict]:
-    """Автоматический импорт медиа из поста в Telegram-канале"""
+    """Автоматический импорт медиа из поста с уведомлениями о статусе"""
     try:
         if not telegram_link or 't.me/' not in telegram_link:
-            return None
+            return {
+                'success': False,
+                'message': '❌ Неверная ссылка'
+            }
         
         match = re.search(r't\.me/([^/]+)/(\d+)', telegram_link)
         if not match:
-            return None
+            return {
+                'success': False,
+                'message': '❌ Не удалось извлечь данные из ссылки'
+            }
         
         channel_username = match.group(1)
         message_id = int(match.group(2))
@@ -54,13 +60,46 @@ async def extract_media_from_link(bot: Bot, telegram_link: str) -> Optional[Dict
             
             result = None
             if message.photo:
-                result = {'type': 'photo', 'file_id': message.photo[-1].file_id, 'media_group_id': message.media_group_id, 'media_json': [message.photo[-1].file_id]}
+                result = {
+                    'success': True,
+                    'type': 'photo',
+                    'file_id': message.photo[-1].file_id,
+                    'media_group_id': message.media_group_id,
+                    'media_json': [message.photo[-1].file_id],
+                    'message': '✅ Фото успешно импортировано'
+                }
             elif message.video:
-                result = {'type': 'video', 'file_id': message.video.file_id, 'media_group_id': message.media_group_id, 'media_json': [message.video.file_id]}
+                result = {
+                    'success': True,
+                    'type': 'video',
+                    'file_id': message.video.file_id,
+                    'media_group_id': message.media_group_id,
+                    'media_json': [message.video.file_id],
+                    'message': '✅ Видео успешно импортировано'
+                }
             elif message.document:
-                result = {'type': 'document', 'file_id': message.document.file_id, 'media_group_id': message.media_group_id, 'media_json': [message.document.file_id]}
+                result = {
+                    'success': True,
+                    'type': 'document',
+                    'file_id': message.document.file_id,
+                    'media_group_id': message.media_group_id,
+                    'media_json': [message.document.file_id],
+                    'message': '✅ Документ успешно импортирован'
+                }
             elif message.animation:
-                result = {'type': 'animation', 'file_id': message.animation.file_id, 'media_group_id': message.media_group_id, 'media_json': [message.animation.file_id]}
+                result = {
+                    'success': True,
+                    'type': 'animation',
+                    'file_id': message.animation.file_id,
+                    'media_group_id': message.media_group_id,
+                    'media_json': [message.animation.file_id],
+                    'message': '✅ Анимация успешно импортирована'
+                }
+            else:
+                result = {
+                    'success': False,
+                    'message': '⚠️ Медиа не найдено. Добавьте вручную'
+                }
             
             try:
                 await bot.delete_message(chat_id=bot.id, message_id=message.message_id)
@@ -68,14 +107,22 @@ async def extract_media_from_link(bot: Bot, telegram_link: str) -> Optional[Dict
                 pass
             
             if result:
-                logger.info(f"✅ Media extracted: {result['type']}")
+                logger.info(f"✅ Media extracted: {result.get('type', 'none')}, success: {result.get('success')}")
             return result
+            
         except TelegramError as e:
             logger.error(f"Cannot access message: {e}")
-            return None
+            return {
+                'success': False,
+                'message': f'❌ Ошибка доступа к посту. Добавьте медиа вручную'
+            }
+            
     except Exception as e:
         logger.error(f"Error extracting media: {e}")
-        return None
+        return {
+            'success': False,
+            'message': f'❌ Ошибка импорта. Добавьте медиа вручную'
+        }
 
 
 async def send_catalog_post_with_media(bot: Bot, chat_id: int, post: Dict, index: int, total: int) -> bool:
@@ -239,10 +286,12 @@ async def notify_subscribers_about_new_post(bot: Bot, post_id: int, category: st
 # ============= ОСНОВНЫЕ КОМАНДЫ =============
 
 async def catalog_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Просмотр каталога - /catalog"""
+    """Просмотр каталога - /catalog (смешанная выдача 4+1)"""
     user_id = update.effective_user.id
     count = 5
-    posts = await catalog_service.get_random_posts(user_id, count=count)
+    
+    # Используем смешанную выдачу
+    posts = await catalog_service.get_random_posts_mixed(user_id, count=count)
     
     if not posts:
         keyboard = [
@@ -264,7 +313,7 @@ async def catalog_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             InlineKeyboardButton(f"🔀 Следующие {count}", callback_data="catalog:next"),
             InlineKeyboardButton("⏹️ Закончить", callback_data="catalog:finish")
         ],
-        [InlineKeyboardButton("🕵🏻‍♀️ Поиск", callback_data="catalog:search")]
+        [InlineKeyboardButton("🔍 Поиск", callback_data="catalog:search")]
     ]
     await update.message.reply_text(
         f"🔃 Показано: {len(posts)}",
@@ -273,11 +322,17 @@ async def catalog_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def search_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Поиск - /search"""
-    keyboard = [[InlineKeyboardButton(cat, callback_data=f"catalog:cat:{cat}")] for cat in CATALOG_CATEGORIES.keys()]
-    keyboard.append([InlineKeyboardButton("⬅️ Назад", callback_data="menu:back")])
+    """Поиск только по словам и тегам - /search"""
+    context.user_data['catalog_search'] = {'step': 'query'}
+    
+    keyboard = [[InlineKeyboardButton("🚫 Отмена", callback_data="catalog:cancel_search")]]
+    
     await update.message.reply_text(
-        "🕵🏼‍♀️ **ПОИСК**\n\nВыберите категорию:",
+        "🔍 **ПОИСК В КАТАЛОГЕ**\n\n"
+        "Введите слова для поиска:\n"
+        "• По названию\n"
+        "• По тегам\n\n"
+        "Пример: маникюр гель-лак",
         reply_markup=InlineKeyboardMarkup(keyboard),
         parse_mode='Markdown'
     )
@@ -374,6 +429,48 @@ async def addtocatalog_command(update: Update, context: ContextTypes.DEFAULT_TYP
     await update.message.reply_text(
         "🆕 **ДОБАВЛЕНИЕ**\n\nШаг 1/5\n\n"
         "⛓️ Ссылка на пост:\n"
+        "Пример: https://t.me/channel/123",
+        reply_markup=InlineKeyboardMarkup(keyboard),
+        parse_mode='Markdown'
+    )
+
+
+async def addgirltocat_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Добавить в категорию TopGirls - /addgirltocat"""
+    if not Config.is_admin(update.effective_user.id):
+        await update.message.reply_text("❌ Команда только для администраторов")
+        return
+    
+    context.user_data['catalog_add_top'] = {
+        'step': 'link',
+        'category': '👱🏻‍♀️ TopGirls'
+    }
+    keyboard = [[InlineKeyboardButton("🚗 Отмена", callback_data="catalog:cancel_top")]]
+    await update.message.reply_text(
+        "💃 **ДОБАВЛЕНИЕ В TOPGIRLS**\n\n"
+        "Шаг 1/3\n\n"
+        "⛓️ Ссылка на оригинальный пост:\n"
+        "Пример: https://t.me/channel/123",
+        reply_markup=InlineKeyboardMarkup(keyboard),
+        parse_mode='Markdown'
+    )
+
+
+async def addboytocat_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Добавить в категорию TopBoys - /addboytocat"""
+    if not Config.is_admin(update.effective_user.id):
+        await update.message.reply_text("❌ Команда только для администраторов")
+        return
+    
+    context.user_data['catalog_add_top'] = {
+        'step': 'link',
+        'category': '🤵🏼‍♂️ TopBoys'
+    }
+    keyboard = [[InlineKeyboardButton("🚗 Отмена", callback_data="catalog:cancel_top")]]
+    await update.message.reply_text(
+        "🤵 **ДОБАВЛЕНИЕ В TOPBOYS**\n\n"
+        "Шаг 1/3\n\n"
+        "⛓️ Ссылка на оригинальный пост:\n"
         "Пример: https://t.me/channel/123",
         reply_markup=InlineKeyboardMarkup(keyboard),
         parse_mode='Markdown'
@@ -786,7 +883,7 @@ async def handle_catalog_callback(update: Update, context: ContextTypes.DEFAULT_
     # ============= БАЗОВЫЕ CALLBACKS =============
     
     if action == "next":
-        posts = await catalog_service.get_random_posts(user_id, count=5)
+        posts = await catalog_service.get_random_posts_mixed(user_id, count=5)
         if not posts:
             keyboard = [
                 [InlineKeyboardButton("🔄 Начать заново", callback_data="catalog:restart")],
@@ -814,12 +911,21 @@ async def handle_catalog_callback(update: Update, context: ContextTypes.DEFAULT_
         await query.edit_message_text("🔄 Сессия сброшена!\n\nИспользуйте /catalog")
     
     elif action == "search":
-        keyboard = [[InlineKeyboardButton(cat, callback_data=f"catalog:cat:{cat}")] for cat in CATALOG_CATEGORIES.keys()]
-        keyboard.append([InlineKeyboardButton("⬅️ Назад", callback_data="catalog:finish")])
+        context.user_data['catalog_search'] = {'step': 'query'}
+        keyboard = [[InlineKeyboardButton("🚫 Отмена", callback_data="catalog:cancel_search")]]
         await query.edit_message_text(
-            "🔍 Выберите категорию:",
-            reply_markup=InlineKeyboardMarkup(keyboard)
+            "🔍 **ПОИСК В КАТАЛОГЕ**\n\n"
+            "Введите слова для поиска:\n"
+            "• По названию\n"
+            "• По тегам\n\n"
+            "Пример: маникюр гель-лак",
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode='Markdown'
         )
+    
+    elif action == "cancel_search":
+        context.user_data.pop('catalog_search', None)
+        await query.edit_message_text("❌ Поиск отменён")
     
     elif action == "cat":
         category = ":".join(data[2:])
@@ -840,7 +946,7 @@ async def handle_catalog_callback(update: Update, context: ContextTypes.DEFAULT_
         if post_id:
             await catalog_service.increment_clicks(post_id, user_id)
     
-    # ============= ИСПРАВЛЕНИЕ: CALLBACK ДЛЯ ВЫБОРА КАТЕГОРИИ ПРИ ДОБАВЛЕНИИ =============
+    # ============= CALLBACK ДЛЯ ВЫБОРА КАТЕГОРИИ ПРИ ДОБАВЛЕНИИ =============
     elif action == "add_cat":
         if 'catalog_add' not in context.user_data:
             await query.answer("❌ Сессия истекла", show_alert=True)
@@ -885,6 +991,10 @@ async def handle_catalog_callback(update: Update, context: ContextTypes.DEFAULT_
     elif action == "cancel":
         context.user_data.pop('catalog_add', None)
         await query.edit_message_text("❌ Добавление отменено")
+    
+    elif action == "cancel_top":
+        context.user_data.pop('catalog_add_top', None)
+        await query.edit_message_text("❌ Добавление Top поста отменено")
     
     elif action == "cancel_ad":
         context.user_data.pop('catalog_ad', None)
@@ -1182,17 +1292,120 @@ async def handle_catalog_text(update: Update, context: ContextTypes.DEFAULT_TYPE
     user_id = update.effective_user.id
     text = update.message.text
     
+    # ============= ПОИСК =============
+    if 'catalog_search' in context.user_data:
+        query_text = text.strip()
+        
+        if len(query_text) < 2:
+            await update.message.reply_text("❌ Запрос слишком короткий (минимум 2 символа)")
+            return
+        
+        posts = await catalog_service.search_posts(query_text, limit=10)
+        
+        if posts:
+            for i, post in enumerate(posts, 1):
+                await send_catalog_post_with_media(context.bot, update.effective_chat.id, post, i, len(posts))
+            
+            keyboard = [[InlineKeyboardButton("✅ Готово", callback_data="catalog:finish")]]
+            await update.message.reply_text(
+                f"🔍 Найдено: {len(posts)} по запросу \"{query_text}\"",
+                reply_markup=InlineKeyboardMarkup(keyboard)
+            )
+        else:
+            await update.message.reply_text(f"❌ Ничего не найдено по запросу \"{query_text}\"")
+        
+        context.user_data.pop('catalog_search', None)
+        return
+    
+    # ============= ОБРАБОТКА TOP ПОСТОВ =============
+    if 'catalog_add_top' in context.user_data:
+        data = context.user_data['catalog_add_top']
+        step = data.get('step')
+        
+        if step == 'link':
+            if text.startswith('https://t.me/'):
+                data['catalog_link'] = text
+                
+                # Пытаемся импортировать медиа с уведомлением
+                media_result = await extract_media_from_link(context.bot, text)
+                
+                if media_result and media_result.get('success'):
+                    data['media_type'] = media_result['type']
+                    data['media_file_id'] = media_result['file_id']
+                    data['media_group_id'] = media_result.get('media_group_id')
+                    data['media_json'] = media_result.get('media_json', [])
+                    
+                    await update.message.reply_text(f"{media_result['message']}")
+                else:
+                    await update.message.reply_text(f"{media_result.get('message', '⚠️ Добавьте медиа вручную')}")
+                
+                data['step'] = 'description'
+                await update.message.reply_text(
+                    "📝 Шаг 2/3\n\n"
+                    "Описание (до 255 символов):"
+                )
+            else:
+                await update.message.reply_text("❌ Ссылка должна начинаться с https://t.me/")
+        
+        elif step == 'description':
+            data['name'] = text[:255]
+            data['step'] = 'tags'
+            await update.message.reply_text(
+                "🏷️ Шаг 3/3\n\n"
+                "Теги через запятую (до 10):"
+            )
+        
+        elif step == 'tags':
+            tags = [t.strip() for t in text.split(',') if t.strip()][:10]
+            data['tags'] = tags
+            
+            # Сохраняем пост
+            category = data['category']
+            post_id = await catalog_service.add_post(
+                user_id=user_id,
+                catalog_link=data['catalog_link'],
+                category=category,
+                name=data['name'],
+                tags=tags,
+                media_type=data.get('media_type'),
+                media_file_id=data.get('media_file_id'),
+                media_group_id=data.get('media_group_id'),
+                media_json=data.get('media_json', [])
+            )
+            
+            if post_id:
+                post = await catalog_service.get_post_by_id(post_id)
+                catalog_number = post.get('catalog_number', '????')
+                
+                await update.message.reply_text(
+                    f"✅ Пост #{catalog_number} добавлен в {category}!\n\n"
+                    f"📝 {data['name']}\n"
+                    f"🏷️ {len(tags)} тегов\n"
+                    f"📸 Медиа: {'Да' if data.get('media_file_id') else 'Нет'}"
+                )
+                
+                # Уведомляем подписчиков
+                await notify_subscribers_about_new_post(context.bot, post_id, category)
+            else:
+                await update.message.reply_text("❌ Ошибка при добавлении поста")
+            
+            context.user_data.pop('catalog_add_top', None)
+        
+        return
+    
     # Обработка отзыва (ТЕКСТ ПОСЛЕ ВЫБОРА ЗВЕЗД)
     if 'catalog_review' in context.user_data and context.user_data['catalog_review'].get('step') == 'text':
         post_id = context.user_data['catalog_review'].get('post_id')
         rating = context.user_data['catalog_review'].get('rating', 5)
         
+        # Передаем бота для уведомлений
         review_id = await catalog_service.add_review(
             post_id=post_id,
             user_id=user_id,
             review_text=text[:500],
             rating=rating,
-            username=update.effective_user.username
+            username=update.effective_user.username,
+            bot=context.bot
         )
         
         if review_id:
@@ -1220,11 +1433,14 @@ async def handle_catalog_text(update: Update, context: ContextTypes.DEFAULT_TYPE
                 
                 # Пытаемся извлечь медиа
                 media_result = await extract_media_from_link(context.bot, text)
-                if media_result:
+                if media_result and media_result.get('success'):
                     data['media_type'] = media_result['type']
                     data['media_file_id'] = media_result['file_id']
                     data['media_group_id'] = media_result.get('media_group_id')
                     data['media_json'] = media_result.get('media_json', [])
+                    await update.message.reply_text(f"{media_result['message']}")
+                else:
+                    await update.message.reply_text(f"{media_result.get('message', '⚠️ Добавьте медиа вручную')}")
                 
                 keyboard = [[InlineKeyboardButton(cat, callback_data=f"catalog:add_cat:{cat}")] for cat in CATALOG_CATEGORIES.keys()]
                 await update.message.reply_text(
@@ -1368,6 +1584,8 @@ __all__ = [
     'review_command',
     'categoryfollow_command',
     'addtocatalog_command',
+    'addgirltocat_command',
+    'addboytocat_command',
     'edit_catalog_command',
     'remove_catalog_command',
     'catalogpriority_command',
