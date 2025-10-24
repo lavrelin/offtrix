@@ -291,13 +291,13 @@ async def notify_subscribers_about_new_post(bot: Bot, post_id: int, category: st
             f"🆕 **НОВЫЙ ПОСТ В КАТЕГОРИИ**\n\n"
             f"#️⃣ Пост {catalog_number}\n"
             f"📂 {category}\n"
-            f"📝 {post.get('name', 'Без названия')}\n\n"
-            f"🔗 Перейти: {post.get('catalog_link')}\n\n"
+            f"📑 {post.get('name', 'Без названия')}\n\n"
+            f"⛓️‍💥 Перейти: {post.get('catalog_link')}\n\n"
             f"Используйте /catalog для просмотра"
         )
         
         keyboard = [
-            [InlineKeyboardButton("👀 Посмотреть", url=post.get('catalog_link'))],
+            [InlineKeyboardButton("🙄 Посмотреть", url=post.get('catalog_link'))],
             [InlineKeyboardButton("🔕 Отписаться", callback_data=f"catalog:unfollow:{category}")]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
@@ -366,11 +366,11 @@ async def search_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [[InlineKeyboardButton("🚫 Отмена", callback_data="catalog:cancel_search")]]
     
     await update.message.reply_text(
-        "🔍 **ПОИСК В КАТАЛОГЕ**\n\n"
+        "🔎 **ПОИСК В КАТАЛОГЕ**\n\n"
         "Введите слова для поиска:\n"
         "• По названию\n"
         "• По тегам\n\n"
-        "Пример: маникюр гель-лак",
+        "Пример: ресницы",
         reply_markup=InlineKeyboardMarkup(keyboard),
         parse_mode='Markdown'
     )
@@ -433,7 +433,7 @@ async def categoryfollow_command(update: Update, context: ContextTypes.DEFAULT_T
         text = "🔔 **ПОДПИСКИ НА КАТЕГОРИИ**\n\n"
         
         if subscriptions:
-            text += "📋 Ваши подписки:\n"
+            text += "☑️ Ваши подписки:\n"
             for sub in subscriptions:
                 text += f"✅ {sub.get('category')}\n"
             text += "\n"
@@ -441,8 +441,8 @@ async def categoryfollow_command(update: Update, context: ContextTypes.DEFAULT_T
         text += "Выберите действие:"
         
         keyboard = [
-            [InlineKeyboardButton("➕ Подписаться на категорию", callback_data="catalog:follow_menu")],
-            [InlineKeyboardButton("📋 Мои подписки", callback_data="catalog:my_follows")]
+            [InlineKeyboardButton("✅ Подписаться на категорию", callback_data="catalog:follow_menu")],
+            [InlineKeyboardButton("☑️ Мои подписки", callback_data="catalog:my_follows")]
         ]
         
         await update.message.reply_text(
@@ -465,8 +465,8 @@ async def addtocatalog_command(update: Update, context: ContextTypes.DEFAULT_TYP
     context.user_data['catalog_add'] = {'step': 'link'}
     keyboard = [[InlineKeyboardButton("🚗 Отмена", callback_data="catalog:cancel")]]
     await update.message.reply_text(
-        "🆕 **ДОБАВЛЕНИЕ**\n\nШаг 1/5\n\n"
-        "⛓️ Ссылка на пост:\n"
+        "🛤️ **ДОБАВЛЕНИЕ**\n\nШаг 1/5\n\n"
+        "🫟 Ссылка на пост:\n"
         "Пример: https://t.me/channel/123",
         reply_markup=InlineKeyboardMarkup(keyboard),
         parse_mode='Markdown'
@@ -487,7 +487,7 @@ async def addgirltocat_command(update: Update, context: ContextTypes.DEFAULT_TYP
     await update.message.reply_text(
         "💃 **ДОБАВЛЕНИЕ В TOPGIRLS**\n\n"
         "Шаг 1/3\n\n"
-        "⛓️ Ссылка на оригинальный пост:\n"
+        "👩🏼‍💼 Ссылка на оригинальный пост:\n"
         "Пример: https://t.me/channel/123",
         reply_markup=InlineKeyboardMarkup(keyboard),
         parse_mode='Markdown'
@@ -508,7 +508,7 @@ async def addboytocat_command(update: Update, context: ContextTypes.DEFAULT_TYPE
     await update.message.reply_text(
         "🤵 **ДОБАВЛЕНИЕ В TOPBOYS**\n\n"
         "Шаг 1/3\n\n"
-        "⛓️ Ссылка на оригинальный пост:\n"
+        "🧏🏻‍♂️ Ссылка на оригинальный пост:\n"
         "Пример: https://t.me/channel/123",
         reply_markup=InlineKeyboardMarkup(keyboard),
         parse_mode='Markdown'
@@ -523,7 +523,7 @@ async def edit_catalog_command(update: Update, context: ContextTypes.DEFAULT_TYP
     
     if not context.args or not context.args[0].isdigit():
         await update.message.reply_text(
-            "🔄 Использование: `/catalogedit [номер]`\n\n"
+            "🧑🏼‍💻 Use: `/catalogedit [номер]`\n\n"
             "Пример: `/catalogedit 1234`",
             parse_mode='Markdown'
         )
@@ -539,21 +539,21 @@ async def edit_catalog_command(update: Update, context: ContextTypes.DEFAULT_TYP
     context.user_data['catalog_edit'] = {'post_id': post['id'], 'post_data': post, 'catalog_number': catalog_number}
     
     text = (
-        f"🛠️ **Редактирование поста #{catalog_number}**\n\n"
+        f"⚙️ **Редактирование поста #{catalog_number}**\n\n"
         f"📂 Категория: {post.get('category')}\n"
-        f"📝 Название: {post.get('name')}\n"
-        f"🏷️ Теги: {', '.join(post.get('tags', []))}\n"
+        f"📇 Название: {post.get('name')}\n"
+        f"#️⃣ Теги: {', '.join(post.get('tags', []))}\n"
         f"🔗 Ссылка: {post.get('catalog_link')}\n\n"
         "Что изменить?"
     )
     
     keyboard = [
-        [InlineKeyboardButton("✏️ Категорию", callback_data="catalog:edit:category")],
-        [InlineKeyboardButton("📝 Название", callback_data="catalog:edit:name")],
-        [InlineKeyboardButton("🏷️ Теги", callback_data="catalog:edit:tags")],
+        [InlineKeyboardButton("🗂️ Категорию", callback_data="catalog:edit:category")],
+        [InlineKeyboardButton("💁🏻 Название", callback_data="catalog:edit:name")],
+        [InlineKeyboardButton("#️⃣ Теги", callback_data="catalog:edit:tags")],
         [InlineKeyboardButton("🔗 Ссылку", callback_data="catalog:edit:link")],
-        [InlineKeyboardButton("📸 Медиа", callback_data="catalog:edit:media")],
-        [InlineKeyboardButton("#️⃣ Номер", callback_data="catalog:edit:number")],
+        [InlineKeyboardButton("💿 Медиа", callback_data="catalog:edit:media")],
+        [InlineKeyboardButton("🆔 Номер", callback_data="catalog:edit:number")],
         [InlineKeyboardButton("⭐ Приоритет", callback_data="catalog:edit:priority")],
         [InlineKeyboardButton("❌ Отменить", callback_data="catalog:edit_cancel")]
     ]
@@ -566,7 +566,7 @@ async def edit_catalog_command(update: Update, context: ContextTypes.DEFAULT_TYP
 
 
 async def change_catalog_number_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Изменить номер поста - /changenumber [старый] [новый]"""
+    """Изменить 🆔 поста - /changenumber [старый] [новый]"""
     if not Config.is_admin(update.effective_user.id):
         await update.message.reply_text("❌ Команда только для администраторов")
         return
@@ -614,8 +614,8 @@ async def remove_catalog_command(update: Update, context: ContextTypes.DEFAULT_T
     
     if not context.args or not context.args[0].isdigit():
         await update.message.reply_text(
-            "🔄 Использование: `/remove [номер]`\n\n"
-            "Пример: `/remove 1234`",
+            "🖍️ Использование: `/remove [номер]`\n\n"
+            "Пример: `/remove 🆔`",
             parse_mode='Markdown'
         )
         return
@@ -629,16 +629,16 @@ async def remove_catalog_command(update: Update, context: ContextTypes.DEFAULT_T
     
     text = (
         f"⚠️ **Удаление поста #{catalog_number}**\n\n"
-        f"📋 Название: {post.get('name')}\n"
-        f"📂 Категория: {post.get('category')}\n"
+        f"ℹ️ Название: {post.get('name')}\n"
+        f"📁 Категория: {post.get('category')}\n"
         f"👁️ Просмотры: {post.get('views', 0)}\n\n"
-        "Вы уверены?"
+        "Подтверждаете❓"
     )
     
     keyboard = [
         [
-            InlineKeyboardButton("✅ Удалить", callback_data=f"catalog:remove_confirm:{post['id']}"),
-            InlineKeyboardButton("❌ Отменить", callback_data="catalog:remove_cancel")
+            InlineKeyboardButton("❗️ Удалить", callback_data=f"catalog:remove_confirm:{post['id']}"),
+            InlineKeyboardButton("⬅️ Отменить", callback_data="catalog:remove_cancel")
         ]
     ]
     
@@ -953,7 +953,7 @@ async def handle_catalog_callback(update: Update, context: ContextTypes.DEFAULT_
                 [InlineKeyboardButton("↩️ Главное меню", callback_data="menu:back")]
             ]
             await safe_edit(
-                "📂 Все посты просмотрены!\n\nНажмите 🔄 для сброса",
+                "✅ Все посты просмотрены!\n\nНажмите 🔄 для сброса",
                 InlineKeyboardMarkup(keyboard)
             )
         else:
@@ -966,12 +966,12 @@ async def handle_catalog_callback(update: Update, context: ContextTypes.DEFAULT_
             "✅ Просмотр завершён!\n\n"
             "/catalog - начать заново\n"
             "/search - поиск\n"
-            "/categoryfollow - подписки"
+            "/categoryfollow - подписки на категории"
         )
-    
+        
     elif action == "restart":
         await catalog_service.reset_session(user_id)
-        await safe_edit("🔄 Сессия сброшена!\n\nИспользуйте /catalog")
+        await safe_edit("🔄 Перезапуск!\n\nИспользуйте /catalog")
     
     elif action == "search":
         context.user_data['catalog_search'] = {'step': 'query'}
@@ -981,7 +981,7 @@ async def handle_catalog_callback(update: Update, context: ContextTypes.DEFAULT_
             "Введите слова для поиска:\n"
             "• По названию\n"
             "• По тегам\n\n"
-            "Пример: маникюр гель-лак",
+            "Пример: ТриксБот",
             InlineKeyboardMarkup(keyboard)
         )
     
@@ -997,7 +997,7 @@ async def handle_catalog_callback(update: Update, context: ContextTypes.DEFAULT_
                 await send_catalog_post_with_media(context.bot, query.message.chat_id, post, i, len(posts))
             keyboard = [[InlineKeyboardButton("✅ Готово", callback_data="catalog:finish")]]
             await safe_edit(
-                f"📂 Найдено: {len(posts)}",
+                f"👌 Обнаружено: {len(posts)}",
                 InlineKeyboardMarkup(keyboard)
             )
         else:
@@ -1095,8 +1095,8 @@ async def handle_catalog_callback(update: Update, context: ContextTypes.DEFAULT_
         if success:
             await query.answer("✅ Подписка оформлена!", show_alert=True)
             await safe_edit(
-                f"🔔 Вы подписались на категорию:\n**{category}**\n\n"
-                "Теперь вы будете получать уведомления о новых постах!"
+                f"🔔 Подписка на:\n**{category}**\n\n"
+                "👌 Вы будете получать уведомления о новых постах добавленых в категорию!"
             )
         else:
             await query.answer("❌ Вы уже подписаны на эту категорию", show_alert=True)
@@ -1106,12 +1106,12 @@ async def handle_catalog_callback(update: Update, context: ContextTypes.DEFAULT_
         
         if not subscriptions:
             await safe_edit(
-                "📋 У вас нет активных подписок\n\n"
-                "/categoryfollow - управление подписками"
+                "📭 У вас нет активных подписок\n\n"
+                "/categoryfollow - меню подписок"
             )
             return
         
-        text = f"📋 **ВАШИ ПОДПИСКИ** ({len(subscriptions)})\n\n"
+        text = f"🗃️ **ВАШИ ПОДПИСКИ** ({len(subscriptions)})\n\n"
         keyboard = []
         
         for sub in subscriptions:
@@ -1188,8 +1188,8 @@ async def handle_catalog_callback(update: Update, context: ContextTypes.DEFAULT_
                 callback_data=f"catalog:follow_cat:{category}"
             )])
         
-        keyboard.append([InlineKeyboardButton("📋 Все категории", callback_data="catalog:follow_menu")])
-        keyboard.append([InlineKeyboardButton("📋 Мои подписки", callback_data="catalog:my_follows")])
+        keyboard.append([InlineKeyboardButton("📂 Все категории", callback_data="catalog:follow_menu")])
+        keyboard.append([InlineKeyboardButton("👌 Мои подписки", callback_data="catalog:my_follows")])
         keyboard.append([InlineKeyboardButton("❌ Закрыть", callback_data="catalog:close_menu")])
         
         status = "✅ Вы подписаны" if is_subscribed else "❌ Вы не подписаны"
@@ -1216,8 +1216,8 @@ async def handle_catalog_callback(update: Update, context: ContextTypes.DEFAULT_
         catalog_number = post.get('catalog_number', '????') if post else '????'
         
         keyboard = [
-            [InlineKeyboardButton(f"👀 Смотреть отзывы ({count})", callback_data=f"catalog:view_reviews:{post_id}")],
-            [InlineKeyboardButton("✍️ Оставить отзыв", callback_data=f"catalog:write_review:{post_id}:{catalog_number}")],
+            [InlineKeyboardButton(f"🫣 Смотреть отзывы ({count})", callback_data=f"catalog:view_reviews:{post_id}")],
+            [InlineKeyboardButton("🤭 Оставить отзыв", callback_data=f"catalog:write_review:{post_id}:{catalog_number}")],
             [InlineKeyboardButton("❌ Закрыть", callback_data="catalog:close_menu")]
         ]
         
@@ -1566,7 +1566,7 @@ async def handle_catalog_text(update: Update, context: ContextTypes.DEFAULT_TYPE
                 else:
                     success = await catalog_service.update_post_field(post_id, 'catalog_number', new_number)
                     if success:
-                        await update.message.reply_text(f"✅ Номер изменён на #{new_number}")
+                        await update.message.reply_text(f"✅ Теперь номер iD #{new_number}")
                     else:
                         await update.message.reply_text("❌ Этот номер уже занят или произошла ошибка")
             except ValueError:
