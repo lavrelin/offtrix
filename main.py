@@ -50,30 +50,27 @@ from handlers.advanced_moderation import (
 # ============= HANDLERS - АДМИН =============
 from handlers.admin_handler import admin_command, say_command, handle_admin_callback, broadcast_command, sendstats_command
 from handlers.autopost_handler import autopost_command, autopost_test_command
-
-# ============= HANDLERS - КАТАЛОГ С МЕДИА =============
 # ============= HANDLERS - КАТАЛОГ С МЕДИА =============
 from handlers.catalog_handler import (
-    catalog_command, search_command, addtocatalog_command,
-    review_command, catalogpriority_command, addcatalogreklama_command,
-    catalogviews_command,                  # ← ДОБАВЬТЕ ЭТУ СТРОКУ
+    catalog_command, 
+    search_command, 
+    addtocatalog_command,
+    review_command, 
+    categoryfollow_command,              # ← НОВАЯ КОМАНДА
+    catalogpriority_command, 
+    addcatalogreklama_command,
+    catalogviews_command,
+    catalogview_command,                 # ← НОВАЯ КОМАНДА
     catalog_stats_users_command,
     catalog_stats_categories_command,
     catalog_stats_popular_command,
-    handle_catalog_callback, handle_catalog_text,
-    mysubscriptions_command,
-    edit_catalog_command,
-    remove_catalog_command,
-    bulkimport_command,
-    catalog_stats_new_command,
     catalog_stats_priority_command,
     catalog_stats_reklama_command,
-    catalog_stats_topusers_command,
-    catalog_stats_export_command,
-    foryou_command,
-    favorites_command,
+    edit_catalog_command,
+    remove_catalog_command,
+    handle_catalog_callback, 
+    handle_catalog_text,
 )
-
 # ============= HANDLERS - ИГРЫ =============
 from handlers.games_handler import (
     wordadd_command, wordedit_command, wordclear_command,
@@ -508,30 +505,25 @@ def main():
     application.add_handler(CommandHandler("broadcast", broadcast_command))
     application.add_handler(CommandHandler("sendstats", sendstats_command))
     
-    # Catalog commands - User
+        # Catalog commands - User
     application.add_handler(CommandHandler("catalog", catalog_command))
     application.add_handler(CommandHandler("search", search_command))
     application.add_handler(CommandHandler("addtocatalog", addtocatalog_command))
     application.add_handler(CommandHandler("review", review_command))
+    application.add_handler(CommandHandler("categoryfollow", categoryfollow_command))  # ← НОВАЯ
     
     # Catalog commands - Admin
     application.add_handler(CommandHandler("catalogpriority", catalogpriority_command))
     application.add_handler(CommandHandler("addcatalogreklama", addcatalogreklama_command))
-    application.add_handler(CommandHandler("catalogviews", catalogviews_command))  # ← НОВАЯ
+    application.add_handler(CommandHandler("catalogviews", catalogviews_command))
+    application.add_handler(CommandHandler("catalogview", catalogview_command))  # ← НОВАЯ
     application.add_handler(CommandHandler("catalog_stats_users", catalog_stats_users_command))
     application.add_handler(CommandHandler("catalog_stats_categories", catalog_stats_categories_command))
     application.add_handler(CommandHandler("catalog_stats_popular", catalog_stats_popular_command))
-    application.add_handler(CommandHandler("foryou", foryou_command))
-    application.add_handler(CommandHandler("favorites", favorites_command))
-    application.add_handler(CommandHandler("catalogedit", edit_catalog_command))
-    application.add_handler(CommandHandler("remove", remove_catalog_command))
-    application.add_handler(CommandHandler("bulkimport", bulkimport_command))
-    application.add_handler(CommandHandler("catalog_stats_new", catalog_stats_new_command))
     application.add_handler(CommandHandler("catalog_stats_priority", catalog_stats_priority_command))
     application.add_handler(CommandHandler("catalog_stats_reklama", catalog_stats_reklama_command))
-    application.add_handler(CommandHandler("catalog_stats_topusers", catalog_stats_topusers_command))
-    application.add_handler(CommandHandler("catalog_stats_export", catalog_stats_export_command))
-
+    application.add_handler(CommandHandler("catalogedit", edit_catalog_command))
+    application.add_handler(CommandHandler("remove", remove_catalog_command))
     
     # Stats commands
     application.add_handler(CommandHandler("channelstats", channelstats_command))
