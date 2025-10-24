@@ -523,7 +523,7 @@ def main():
     application.add_handler(CommandHandler("catalog_stats_popular", catalog_stats_popular_command))
     application.add_handler(CommandHandler("foryou", foryou_command))
     application.add_handler(CommandHandler("favorites", favorites_command))
-    application.add_handler(CommandHandler("edit", edit_catalog_command))
+    application.add_handler(CommandHandler("catalogedit", edit_catalog_command))
     application.add_handler(CommandHandler("remove", remove_catalog_command))
     application.add_handler(CommandHandler("bulkimport", bulkimport_command))
     application.add_handler(CommandHandler("catalog_stats_new", catalog_stats_new_command))
