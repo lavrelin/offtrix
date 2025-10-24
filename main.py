@@ -279,7 +279,7 @@ rollstatus_command = ignore_budapest_chat_commands(rollstatus_command)
 mynumber_command = ignore_budapest_chat_commands(mynumber_command)
 
 # Wrap rating commands
-rate_start_command = ignore_budapest_chat_commands(rate_start_command)
+itsme_command = ignore_budapest_chat_commands(rate_start_command)
 toppeople_command = ignore_budapest_chat_commands(toppeople_command)
 topboys_command = ignore_budapest_chat_commands(topboys_command)
 topgirls_command = ignore_budapest_chat_commands(topgirls_command)
