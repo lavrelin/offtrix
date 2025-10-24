@@ -27,7 +27,7 @@ from handlers.moderation_handler import (
     lastseen_command
 )
 from handlers.rating_handler import (
-    rate_start_command, toppeople_command, topboys_command, 
+    itsme_command, toppeople_command, topboys_command, 
     topgirls_command, toppeoplereset_command, handle_rate_callback,
     handle_rate_moderation_callback,
     handle_rate_photo,    # ← ДОБАВЬТЕ
@@ -586,7 +586,7 @@ def main():
     application.add_handler(CommandHandler("wordclear", wordclear_command))
     
     # Rating commands
-    application.add_handler(CommandHandler("ratestart", rate_start_command))
+    application.add_handler(CommandHandler("itsme", itsme_command))
     application.add_handler(CommandHandler("toppeople", toppeople_command))
     application.add_handler(CommandHandler("topboys", topboys_command))
     application.add_handler(CommandHandler("topgirls", topgirls_command))
