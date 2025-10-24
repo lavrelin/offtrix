@@ -347,15 +347,22 @@ class CatalogService:
             return []
     
     async def search_posts(self, query: str, limit: int = 10) -> List[Dict]:
-        """Поиск постов ТОЛЬКО по ключевым словам и тегам"""
+        """Поиск постов ТОЛЬКО по ключевым словам и тегам - ИСПРАВЛЕНО"""
         try:
+            from sqlalchemy import String, cast
+            
             async with db.get_session() as session:
                 keywords = query.lower().split()
                 
                 conditions = []
                 for keyword in keywords:
+                    # Поиск по названию
                     conditions.append(func.lower(CatalogPost.name).contains(keyword))
-                    conditions.append(func.cast(CatalogPost.tags, String).contains(keyword)
+                    
+                    # ИСПРАВЛЕНО: Поиск по тегам через приведение к строке
+                    conditions.append(
+                        cast(CatalogPost.tags, String).ilike(f'%{keyword}%')
+                    )
                 
                 query_obj = select(CatalogPost).where(
                     and_(
@@ -371,6 +378,7 @@ class CatalogService:
                 for post in posts:
                     post_dict = self._post_to_dict(post)
                     
+                    # Добавляем рейтинг
                     if post.category in ['👱🏻‍♀️ TopGirls', '🤵🏼‍♂️ TopBoys']:
                         post_dict['rating'] = await self._get_rating_from_original_post(post.catalog_link)
                         post_dict['review_count'] = 0
@@ -388,6 +396,7 @@ class CatalogService:
                     
                     result_posts.append(post_dict)
                 
+                logger.info(f"Search '{query}' found {len(result_posts)} posts")
                 return result_posts
                 
         except Exception as e:
