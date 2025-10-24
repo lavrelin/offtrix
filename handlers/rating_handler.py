@@ -30,7 +30,7 @@ async def itsme_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     
     context.user_data['rate_step'] = 'photo'
-    keyboard = [[InlineKeyboardButton("🚗 Отмена", callback_data="rate:cancel")]]
+    keyboard = [[InlineKeyboardButton("Я стенсняюсь😳, ⬅️Назад", callback_data="rate:cancel")]]
     
     text = (
         "**❤️ TopPeople Budapest — время заявить о себе**\n\n"
