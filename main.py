@@ -60,7 +60,18 @@ from handlers.catalog_handler import (
     catalog_stats_users_command,
     catalog_stats_categories_command,
     catalog_stats_popular_command,
-    handle_catalog_callback, handle_catalog_text
+    handle_catalog_callback, handle_catalog_text,
+    mysubscriptions_command,
+    edit_catalog_command,
+    remove_catalog_command,
+    bulkimport_command,
+    catalog_stats_new_command,
+    catalog_stats_priority_command,
+    catalog_stats_reklama_command,
+    catalog_stats_topusers_command,
+    catalog_stats_export_command,
+    foryou_command,
+    favorites_command,
 )
 
 # ============= HANDLERS - ИГРЫ =============
@@ -510,6 +521,16 @@ def main():
     application.add_handler(CommandHandler("catalog_stats_users", catalog_stats_users_command))
     application.add_handler(CommandHandler("catalog_stats_categories", catalog_stats_categories_command))
     application.add_handler(CommandHandler("catalog_stats_popular", catalog_stats_popular_command))
+    application.add_handler(CommandHandler("foryou", foryou_command))
+    application.add_handler(CommandHandler("favorites", favorites_command))
+    application.add_handler(CommandHandler("edit", edit_catalog_command))
+    application.add_handler(CommandHandler("remove", remove_catalog_command))
+    application.add_handler(CommandHandler("bulkimport", bulkimport_command))
+    application.add_handler(CommandHandler("catalog_stats_new", catalog_stats_new_command))
+    application.add_handler(CommandHandler("catalog_stats_priority", catalog_stats_priority_command))
+    application.add_handler(CommandHandler("catalog_stats_reklama", catalog_stats_reklama_command))
+    application.add_handler(CommandHandler("catalog_stats_topusers", catalog_stats_topusers_command))
+    application.add_handler(CommandHandler("catalog_stats_export", catalog_stats_export_command))
 
     
     # Stats commands
