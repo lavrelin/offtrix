@@ -33,9 +33,9 @@ async def itsme_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [[InlineKeyboardButton("🚗 Отмена", callback_data="rate:cancel")]]
     
     text = (
-        "⭐️ **Анкета в ❤️ TopPeople Budapest**\n\n"
-        "Начнем хайпить. Добавь фото\n\n"
-        "😳 Покажи себя, подними активность своего 🌀аккаунта "
+        "**❤️ TopPeople Budapest — время заявить о себе**\n\n"
+        "Добавь фото, чтобы попасть в ленту лучших и привлечь внимание 🔥\n\n"
+        "Покажи себя и подними активность своего 🌀аккаунта."
     )
     
     await update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
