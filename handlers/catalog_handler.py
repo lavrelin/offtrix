@@ -873,12 +873,37 @@ async def catalog_stats_reklama_command(update: Update, context: ContextTypes.DE
 # ============= CALLBACKS =============
 
 async def handle_catalog_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Обработчик callback"""
+    """Обработчик callback - ИСПРАВЛЕНО для работы с медиа"""
     query = update.callback_query
     await query.answer()
     data = query.data.split(":")
     action = data[1] if len(data) > 1 else None
     user_id = update.effective_user.id
+    
+    # Вспомогательная функция для безопасного редактирования
+    async def safe_edit(text, keyboard=None, parse_mode='Markdown'):
+        """Безопасное редактирование - работает с медиа и текстом"""
+        try:
+            await query.edit_message_text(
+                text,
+                reply_markup=keyboard,
+                parse_mode=parse_mode
+            )
+        except Exception:
+            # Если не получилось отредактировать текст (возможно медиа)
+            try:
+                await query.edit_message_caption(
+                    caption=text,
+                    reply_markup=keyboard,
+                    parse_mode=parse_mode
+                )
+            except Exception:
+                # Если вообще не получилось - отправляем новое сообщение
+                await query.message.reply_text(
+                    text,
+                    reply_markup=keyboard,
+                    parse_mode=parse_mode
+                )
     
     # ============= БАЗОВЫЕ CALLBACKS =============
     
@@ -889,9 +914,9 @@ async def handle_catalog_callback(update: Update, context: ContextTypes.DEFAULT_
                 [InlineKeyboardButton("🔄 Начать заново", callback_data="catalog:restart")],
                 [InlineKeyboardButton("↩️ Главное меню", callback_data="menu:back")]
             ]
-            await query.edit_message_text(
+            await safe_edit(
                 "📂 Все посты просмотрены!\n\nНажмите 🔄 для сброса",
-                reply_markup=InlineKeyboardMarkup(keyboard)
+                InlineKeyboardMarkup(keyboard)
             )
         else:
             for i, post in enumerate(posts, 1):
@@ -899,7 +924,7 @@ async def handle_catalog_callback(update: Update, context: ContextTypes.DEFAULT_
             await query.message.delete()
     
     elif action == "finish":
-        await query.edit_message_text(
+        await safe_edit(
             "✅ Просмотр завершён!\n\n"
             "/catalog - начать заново\n"
             "/search - поиск\n"
@@ -908,24 +933,23 @@ async def handle_catalog_callback(update: Update, context: ContextTypes.DEFAULT_
     
     elif action == "restart":
         await catalog_service.reset_session(user_id)
-        await query.edit_message_text("🔄 Сессия сброшена!\n\nИспользуйте /catalog")
+        await safe_edit("🔄 Сессия сброшена!\n\nИспользуйте /catalog")
     
     elif action == "search":
         context.user_data['catalog_search'] = {'step': 'query'}
         keyboard = [[InlineKeyboardButton("🚫 Отмена", callback_data="catalog:cancel_search")]]
-        await query.edit_message_text(
+        await safe_edit(
             "🔍 **ПОИСК В КАТАЛОГЕ**\n\n"
             "Введите слова для поиска:\n"
             "• По названию\n"
             "• По тегам\n\n"
             "Пример: маникюр гель-лак",
-            reply_markup=InlineKeyboardMarkup(keyboard),
-            parse_mode='Markdown'
+            InlineKeyboardMarkup(keyboard)
         )
     
     elif action == "cancel_search":
         context.user_data.pop('catalog_search', None)
-        await query.edit_message_text("❌ Поиск отменён")
+        await safe_edit("❌ Поиск отменён")
     
     elif action == "cat":
         category = ":".join(data[2:])
@@ -934,12 +958,12 @@ async def handle_catalog_callback(update: Update, context: ContextTypes.DEFAULT_
             for i, post in enumerate(posts, 1):
                 await send_catalog_post_with_media(context.bot, query.message.chat_id, post, i, len(posts))
             keyboard = [[InlineKeyboardButton("✅ Готово", callback_data="catalog:finish")]]
-            await query.edit_message_text(
+            await safe_edit(
                 f"📂 Найдено: {len(posts)}",
-                reply_markup=InlineKeyboardMarkup(keyboard)
+                InlineKeyboardMarkup(keyboard)
             )
         else:
-            await query.edit_message_text(f"❌ В категории '{category}' пока нет постов")
+            await safe_edit(f"❌ В категории '{category}' пока нет постов")
     
     elif action == "click":
         post_id = int(data[2]) if len(data) > 2 else None
@@ -956,7 +980,7 @@ async def handle_catalog_callback(update: Update, context: ContextTypes.DEFAULT_
         context.user_data['catalog_add']['category'] = category
         context.user_data['catalog_add']['step'] = 'name'
         
-        await query.edit_message_text(
+        await safe_edit(
             f"✅ Категория: {category}\n\n"
             f"📝 Шаг 3/5\n\n"
             f"Название (до 255 символов):"
@@ -977,36 +1001,36 @@ async def handle_catalog_callback(update: Update, context: ContextTypes.DEFAULT_
         
         keyboard = [[InlineKeyboardButton("⏮️ Отмена", callback_data="catalog:cancel_review")]]
         
-        await query.edit_message_text(
+        await safe_edit(
             f"✅ Оценка: {stars}\n\n"
             f"📝 Пост #{catalog_number}\n\n"
             f"Теперь напишите текст отзыва (макс. 500 символов):",
-            reply_markup=InlineKeyboardMarkup(keyboard)
+            InlineKeyboardMarkup(keyboard)
         )
     
     elif action == "cancel_review":
         context.user_data.pop('catalog_review', None)
-        await query.edit_message_text("❌ Отзыв отменён")
+        await safe_edit("❌ Отзыв отменён")
     
     elif action == "cancel":
         context.user_data.pop('catalog_add', None)
-        await query.edit_message_text("❌ Добавление отменено")
+        await safe_edit("❌ Добавление отменено")
     
     elif action == "cancel_top":
         context.user_data.pop('catalog_add_top', None)
-        await query.edit_message_text("❌ Добавление Top поста отменено")
+        await safe_edit("❌ Добавление Top поста отменено")
     
     elif action == "cancel_ad":
         context.user_data.pop('catalog_ad', None)
-        await query.edit_message_text("❌ Добавление рекламы отменено")
+        await safe_edit("❌ Добавление рекламы отменено")
     
     elif action == "priority_finish":
         links = context.user_data.get('catalog_priority', {}).get('links', [])
         if links:
             count = await catalog_service.set_priority_posts(links)
-            await query.edit_message_text(f"✅ Установлено {count} приоритетных постов")
+            await safe_edit(f"✅ Установлено {count} приоритетных постов")
         else:
-            await query.edit_message_text("❌ Ссылки не добавлены")
+            await safe_edit("❌ Ссылки не добавлены")
         context.user_data.pop('catalog_priority', None)
     
     # ============= ПОДПИСКИ =============
@@ -1021,9 +1045,9 @@ async def handle_catalog_callback(update: Update, context: ContextTypes.DEFAULT_
         keyboard.append([InlineKeyboardButton("📋 Мои подписки", callback_data="catalog:my_follows")])
         keyboard.append([InlineKeyboardButton("⬅️ Назад", callback_data="catalog:finish")])
         
-        await query.edit_message_text(
+        await safe_edit(
             "➕ Выберите категорию для подписки:",
-            reply_markup=InlineKeyboardMarkup(keyboard)
+            InlineKeyboardMarkup(keyboard)
         )
     
     elif action == "follow_cat":
@@ -1032,10 +1056,9 @@ async def handle_catalog_callback(update: Update, context: ContextTypes.DEFAULT_
         
         if success:
             await query.answer("✅ Подписка оформлена!", show_alert=True)
-            await query.edit_message_text(
+            await safe_edit(
                 f"🔔 Вы подписались на категорию:\n**{category}**\n\n"
-                "Теперь вы будете получать уведомления о новых постах!",
-                parse_mode='Markdown'
+                "Теперь вы будете получать уведомления о новых постах!"
             )
         else:
             await query.answer("❌ Вы уже подписаны на эту категорию", show_alert=True)
@@ -1044,7 +1067,7 @@ async def handle_catalog_callback(update: Update, context: ContextTypes.DEFAULT_
         subscriptions = await catalog_service.get_user_subscriptions(user_id)
         
         if not subscriptions:
-            await query.edit_message_text(
+            await safe_edit(
                 "📋 У вас нет активных подписок\n\n"
                 "/categoryfollow - управление подписками"
             )
@@ -1066,11 +1089,7 @@ async def handle_catalog_callback(update: Update, context: ContextTypes.DEFAULT_
         keyboard.append([InlineKeyboardButton("🔕 Отписаться от всех", callback_data="catalog:unfollow_all")])
         keyboard.append([InlineKeyboardButton("⬅️ Назад", callback_data="catalog:follow_menu")])
         
-        await query.edit_message_text(
-            text,
-            reply_markup=InlineKeyboardMarkup(keyboard),
-            parse_mode='Markdown'
-        )
+        await safe_edit(text, InlineKeyboardMarkup(keyboard))
     
     elif action == "unfollow":
         category = ":".join(data[2:])
@@ -1081,7 +1100,7 @@ async def handle_catalog_callback(update: Update, context: ContextTypes.DEFAULT_
         subscriptions = await catalog_service.get_user_subscriptions(user_id)
         
         if not subscriptions:
-            await query.edit_message_text(
+            await safe_edit(
                 "📋 У вас нет активных подписок\n\n"
                 "/categoryfollow - управление подписками"
             )
@@ -1103,11 +1122,11 @@ async def handle_catalog_callback(update: Update, context: ContextTypes.DEFAULT_
         keyboard.append([InlineKeyboardButton("🔕 Отписаться от всех", callback_data="catalog:unfollow_all")])
         keyboard.append([InlineKeyboardButton("⬅️ Назад", callback_data="catalog:follow_menu")])
         
-        await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
+        await safe_edit(text, InlineKeyboardMarkup(keyboard))
     
     elif action == "unfollow_all":
         count = await catalog_service.unsubscribe_from_all(user_id)
-        await query.edit_message_text(
+        await safe_edit(
             f"✅ Отписались от всех категорий ({count})\n\n"
             "/categoryfollow - управление подписками"
         )
@@ -1137,13 +1156,12 @@ async def handle_catalog_callback(update: Update, context: ContextTypes.DEFAULT_
         
         status = "✅ Вы подписаны" if is_subscribed else "❌ Вы не подписаны"
         
-        await query.edit_message_text(
+        await safe_edit(
             f"🔔 **ПОДПИСКА НА КАТЕГОРИЮ**\n\n"
             f"📂 {category}\n"
             f"{status}\n\n"
             "Выберите действие:",
-            reply_markup=InlineKeyboardMarkup(keyboard),
-            parse_mode='Markdown'
+            InlineKeyboardMarkup(keyboard)
         )
     
     # ============= ОТЗЫВЫ =============
@@ -1156,7 +1174,6 @@ async def handle_catalog_callback(update: Update, context: ContextTypes.DEFAULT_
         reviews = await catalog_service.get_reviews(post_id, limit=100)
         count = len(reviews)
         
-        # Получаем информацию о посте
         post = await catalog_service.get_post_by_id(post_id)
         catalog_number = post.get('catalog_number', '????') if post else '????'
         
@@ -1166,12 +1183,11 @@ async def handle_catalog_callback(update: Update, context: ContextTypes.DEFAULT_
             [InlineKeyboardButton("❌ Закрыть", callback_data="catalog:close_menu")]
         ]
         
-        await query.edit_message_text(
+        await safe_edit(
             f"🧑‍🧒‍🧒 **ОТЗЫВЫ О ПОСТЕ #{catalog_number}**\n\n"
             f"Всего отзывов: {count}\n\n"
             "Выберите действие:",
-            reply_markup=InlineKeyboardMarkup(keyboard),
-            parse_mode='Markdown'
+            InlineKeyboardMarkup(keyboard)
         )
     
     elif action == "view_reviews":
@@ -1184,7 +1200,7 @@ async def handle_catalog_callback(update: Update, context: ContextTypes.DEFAULT_
         catalog_number = post.get('catalog_number', '????') if post else '????'
         
         if not reviews:
-            await query.edit_message_text(
+            await safe_edit(
                 f"📝 Отзывов о посте #{catalog_number} пока нет\n\n"
                 "/catalog - продолжить просмотр"
             )
@@ -1203,11 +1219,7 @@ async def handle_catalog_callback(update: Update, context: ContextTypes.DEFAULT_
             [InlineKeyboardButton("⬅️ Назад", callback_data=f"catalog:reviews_menu:{post_id}")]
         ]
         
-        await query.edit_message_text(
-            text,
-            reply_markup=InlineKeyboardMarkup(keyboard),
-            parse_mode='Markdown'
-        )
+        await safe_edit(text, InlineKeyboardMarkup(keyboard))
     
     elif action == "write_review":
         post_id = int(data[2]) if len(data) > 2 else None
@@ -1215,7 +1227,6 @@ async def handle_catalog_callback(update: Update, context: ContextTypes.DEFAULT_
         if not post_id:
             return
         
-        # Сначала выбор звезд
         context.user_data['catalog_review'] = {
             'post_id': post_id,
             'catalog_number': catalog_number,
@@ -1235,11 +1246,10 @@ async def handle_catalog_callback(update: Update, context: ContextTypes.DEFAULT_
             [InlineKeyboardButton("❌ Отмена", callback_data="catalog:cancel_review")]
         ]
         
-        await query.edit_message_text(
+        await safe_edit(
             f"🌟 **ОЦЕНКА ПОСТА #{catalog_number}**\n\n"
             "Выберите оценку:",
-            reply_markup=InlineKeyboardMarkup(keyboard),
-            parse_mode='Markdown'
+            InlineKeyboardMarkup(keyboard)
         )
     
     # ============= РЕДАКТИРОВАНИЕ =============
@@ -1248,12 +1258,10 @@ async def handle_catalog_callback(update: Update, context: ContextTypes.DEFAULT_
         post_id = int(data[2]) if len(data) > 2 else None
         if post_id:
             success = await catalog_service.delete_post(post_id, user_id)
-            await query.edit_message_text(
-                f"🗑️ Пост удалён" if success else "❌ Ошибка"
-            )
+            await safe_edit(f"🗑️ Пост удалён" if success else "❌ Ошибка")
     
     elif action == "remove_cancel":
-        await query.edit_message_text("❌ Удаление отменено")
+        await safe_edit("❌ Удаление отменено")
     
     elif action == "edit":
         field = data[2] if len(data) > 2 else None
@@ -1275,11 +1283,11 @@ async def handle_catalog_callback(update: Update, context: ContextTypes.DEFAULT_
             'number': "Введите новый номер (1-9999):"
         }
         
-        await query.edit_message_text(prompts.get(field, "Введите новое значение:"))
+        await safe_edit(prompts.get(field, "Введите новое значение:"))
     
     elif action == "edit_cancel":
         context.user_data.pop('catalog_edit', None)
-        await query.edit_message_text("❌ Редактирование отменено")
+        await safe_edit("❌ Редактирование отменено")
     
     elif action == "close_menu":
         await query.delete_message()
