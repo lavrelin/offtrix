@@ -59,8 +59,6 @@ class Post(Base):
     piar_description = Column(Text, nullable=True)
    # ============= КАТАЛОГ УСЛУГ =============
 
-# Добавить в models.py в класс CatalogPost:
-
 class CatalogPost(Base):
     """Запись в каталоге услуг"""
     __tablename__ = 'catalog_posts'
@@ -72,7 +70,10 @@ class CatalogPost(Base):
     name = Column(String(255))
     tags = Column(JSON, default=list)
     
-    # ============= НОВЫЕ ПОЛЯ ДЛЯ МЕДИА =============
+    # ============= УНИКАЛЬНЫЙ НОМЕР ПОСТА =============
+    catalog_number = Column(Integer, unique=True, nullable=True)  # Уникальный номер 1-9999
+    
+    # ============= ПОЛЯ ДЛЯ МЕДИА =============
     media_type = Column(String(50), nullable=True)  # photo, video, animation, album
     media_file_id = Column(String(500), nullable=True)  # file_id из Telegram
     media_group_id = Column(String(255), nullable=True)  # для альбомов
@@ -113,13 +114,12 @@ class CatalogSubscription(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
-# models.py
 class CatalogSession(Base):
     __tablename__ = 'catalog_sessions'
     
     id = Column(Integer, primary_key=True)
     user_id = Column(BigInteger, nullable=False, unique=True)
     viewed_posts = Column(JSON, default=[])
-    favorites = Column(JSON, default=[])  # ← НОВОЕ ПОЛЕ
+    favorites = Column(JSON, default=[])
     last_activity = Column(DateTime, default=datetime.utcnow)
     session_active = Column(Boolean, default=True)
