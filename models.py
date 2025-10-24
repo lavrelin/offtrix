@@ -8,9 +8,9 @@ Base = declarative_base()
 
 # ✅ ИСПРАВЛЕНО: Правильное определение enum с заглавными буквами
 class Gender(str, Enum):
-    MALE = 'MALE'           # ← Было 'male', стало 'MALE'
-    FEMALE = 'FEMALE'       # ← Было 'female', стало 'FEMALE'
-    UNKNOWN = 'UNKNOWN'     # ← Было 'unknown', стало 'UNKNOWN'
+    MALE = 'MALE'
+    FEMALE = 'FEMALE'
+    UNKNOWN = 'UNKNOWN'
 
 class PostStatus(str, Enum):
     PENDING = 'PENDING'
@@ -57,7 +57,9 @@ class Post(Base):
     piar_telegram = Column(String(255), nullable=True)
     piar_price = Column(String(255), nullable=True)
     piar_description = Column(Text, nullable=True)
-   # ============= КАТАЛОГ УСЛУГ =============
+
+
+# ============= КАТАЛОГ УСЛУГ - ВЕРСИЯ 4.0 =============
 
 class CatalogPost(Base):
     """Запись в каталоге услуг"""
@@ -71,13 +73,17 @@ class CatalogPost(Base):
     tags = Column(JSON, default=list)
     
     # ============= УНИКАЛЬНЫЙ НОМЕР ПОСТА =============
-    catalog_number = Column(Integer, unique=True, nullable=True)  # Уникальный номер 1-9999
+    catalog_number = Column(Integer, unique=True, nullable=True)
+    
+    # ============= ПОЛЯ ДЛЯ АВТОРА - НОВОЕ В v4.0 =============
+    author_username = Column(String(255), nullable=True)  # @username автора услуги
+    author_id = Column(BigInteger, nullable=True)  # Telegram ID автора (если доступен)
     
     # ============= ПОЛЯ ДЛЯ МЕДИА =============
-    media_type = Column(String(50), nullable=True)  # photo, video, animation, album
-    media_file_id = Column(String(500), nullable=True)  # file_id из Telegram
-    media_group_id = Column(String(255), nullable=True)  # для альбомов
-    media_json = Column(JSON, default=list, nullable=True)  # массив file_id для альбомов
+    media_type = Column(String(50), nullable=True)
+    media_file_id = Column(String(500), nullable=True)
+    media_group_id = Column(String(255), nullable=True)
+    media_json = Column(JSON, default=list, nullable=True)
     
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
