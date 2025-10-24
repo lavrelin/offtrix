@@ -1,18 +1,15 @@
 # -*- coding: utf-8 -*-
 """
-Сервис для работы с каталогом услуг - ПОЛНАЯ ВЕРСИЯ 2.0
-Включает все методы из документации TRIX_Bot_Catalog_Documentation_v2.md
+Сервис для работы с каталогом услуг - УПРОЩЕННАЯ ВЕРСИЯ 3.0
 
-Новые возможности v2.0:
-- Управление подписками пользователей
-- Редактирование и удаление постов
-- Массовый импорт
-- Персональные рекомендации
-- Система избранного
-- Расширенная статистика
-- Экспорт данных
+Основные изменения:
+- Добавлены методы get_unique_viewers() и get_unique_clickers()
+- Добавлен метод get_top_posts_with_clicks()
+- Убрана функция избранного
+- Убрана функция персональных рекомендаций
+- Убран массовый импорт
 
-Версия: 2.0.0 FULL
+Версия: 3.0.0
 Дата: 24.10.2025
 """
 import logging
@@ -26,7 +23,7 @@ from models import CatalogPost, CatalogReview, CatalogSubscription, CatalogSessi
 
 logger = logging.getLogger(__name__)
 
-# ============= КАТЕГОРИИ КАТАЛОГА (РАСШИРЕННЫЕ v2.0) =============
+# ============= КАТЕГОРИИ КАТАЛОГА =============
 CATALOG_CATEGORIES = {
     '💇‍♀️ Красота и уход': [
         'Барбер', 'БьютиПроцедуры', 'Волосы', 'Косметолог',
@@ -55,14 +52,14 @@ CATALOG_CATEGORIES = {
 
 
 class CatalogService:
-    """Сервис для работы с каталогом услуг - ПОЛНАЯ ВЕРСИЯ 2.0"""
+    """Сервис для работы с каталогом услуг - УПРОЩЕННАЯ ВЕРСИЯ"""
     
     def __init__(self):
         self.max_posts_per_page = 5
         self.max_priority_posts = 10
         self.ad_frequency = 10
     
-    # ============= БАЗОВЫЕ МЕТОДЫ (v1.0) =============
+    # ============= БАЗОВЫЕ МЕТОДЫ =============
     
     async def add_post(
         self,
@@ -109,10 +106,9 @@ class CatalogService:
             return None
     
     async def get_random_posts(self, user_id: int, count: int = 5) -> List[Dict]:
-        """Получить случайные посты без повторов с медиа"""
+        """Получить случайные посты без повторов"""
         try:
             async with db.get_session() as session:
-                # Получаем или создаём сессию пользователя
                 result = await session.execute(
                     select(CatalogSession).where(
                         and_(
@@ -135,7 +131,6 @@ class CatalogService:
                 
                 viewed_ids = user_session.viewed_posts or []
                 
-                # Получаем непросмотренные активные посты
                 result = await session.execute(
                     select(CatalogPost).where(
                         and_(
@@ -149,7 +144,6 @@ class CatalogService:
                 if not posts:
                     return []
                 
-                # Обновляем сессию
                 for post in posts:
                     viewed_ids.append(post.id)
                 
@@ -191,7 +185,7 @@ class CatalogService:
             return []
     
     async def get_post_by_id(self, post_id: int) -> Optional[Dict]:
-        """Получить пост по ID с медиа"""
+        """Получить пост по ID"""
         try:
             async with db.get_session() as session:
                 result = await session.execute(
@@ -208,7 +202,7 @@ class CatalogService:
             logger.error(f"Error getting post {post_id}: {e}")
             return None
     
-    async def increment_views(self, post_id: int):
+    async def increment_views(self, post_id: int, user_id: Optional[int] = None):
         """Увеличить счётчик просмотров"""
         try:
             async with db.get_session() as session:
@@ -224,7 +218,7 @@ class CatalogService:
         except Exception as e:
             logger.error(f"Error incrementing views: {e}")
     
-    async def increment_clicks(self, post_id: int):
+    async def increment_clicks(self, post_id: int, user_id: Optional[int] = None):
         """Увеличить счётчик кликов"""
         try:
             async with db.get_session() as session:
@@ -345,7 +339,7 @@ class CatalogService:
                 
                 if existing:
                     logger.info(f"User {user_id} already subscribed to {category}")
-                    return True
+                    return False
                 
                 subscription = CatalogSubscription(
                     user_id=user_id,
@@ -410,10 +404,8 @@ class CatalogService:
             logger.error(f"Error getting category subscribers: {e}")
             return []
     
-    # ============= НОВЫЕ МЕТОДЫ v2.0: УПРАВЛЕНИЕ ПОДПИСКАМИ =============
-    
     async def get_user_subscriptions(self, user_id: int) -> List[Dict]:
-        """Получить все подписки пользователя с количеством новых постов"""
+        """Получить все подписки пользователя"""
         try:
             async with db.get_session() as session:
                 result = await session.execute(
@@ -425,22 +417,9 @@ class CatalogService:
                 
                 subs_data = []
                 for sub in subscriptions:
-                    # Получаем количество новых постов
-                    new_result = await session.execute(
-                        select(func.count(CatalogPost.id)).where(
-                            and_(
-                                CatalogPost.category == sub.subscription_value,
-                                CatalogPost.created_at > sub.created_at,
-                                CatalogPost.is_active == True
-                            )
-                        )
-                    )
-                    new_count = new_result.scalar() or 0
-                    
                     subs_data.append({
                         'category': sub.subscription_value,
-                        'subscribed_at': sub.created_at.isoformat() if sub.created_at else None,
-                        'new_count': new_count
+                        'subscribed_at': sub.created_at.isoformat() if sub.created_at else None
                     })
                 
                 return subs_data
@@ -472,7 +451,7 @@ class CatalogService:
             logger.error(f"Error unsubscribing from all: {e}")
             return 0
     
-    # ============= НОВЫЕ МЕТОДЫ v2.0: РЕДАКТИРОВАНИЕ =============
+    # ============= РЕДАКТИРОВАНИЕ =============
     
     async def update_post_field(self, post_id: int, field: str, value: any) -> bool:
         """Обновить конкретное поле поста"""
@@ -545,7 +524,6 @@ class CatalogService:
                     logger.warning(f"Post {post_id} not found")
                     return False
                 
-                # Деактивируем пост вместо удаления
                 post.is_active = False
                 post.updated_at = datetime.utcnow()
                 await session.commit()
@@ -557,51 +535,7 @@ class CatalogService:
             logger.error(f"Error deleting post: {e}")
             return False
     
-    # ============= НОВЫЕ МЕТОДЫ v2.0: МАССОВЫЙ ИМПОРТ =============
-    
-    async def bulk_import(self, links: List[str], admin_user_id: int) -> Dict:
-        """Массовый импорт постов из списка ссылок"""
-        results = {'success': 0, 'failed': 0, 'details': []}
-        
-        for link in links[:50]:  # Максимум 50 за раз
-            try:
-                # Упрощённая версия - в реальности нужно парсить каждый пост
-                post_id = await self.add_post(
-                    user_id=admin_user_id,
-                    catalog_link=link,
-                    category='Без категории',
-                    name='Импортированный пост',
-                    tags=[]
-                )
-                
-                if post_id:
-                    results['success'] += 1
-                    results['details'].append({
-                        'link': link,
-                        'status': 'success',
-                        'id': post_id
-                    })
-                else:
-                    results['failed'] += 1
-                    results['details'].append({
-                        'link': link,
-                        'status': 'failed',
-                        'error': 'Unknown'
-                    })
-                    
-            except Exception as e:
-                results['failed'] += 1
-                results['details'].append({
-                    'link': link,
-                    'status': 'failed',
-                    'error': str(e)
-                })
-                logger.error(f"Error importing {link}: {e}")
-        
-        logger.info(f"Bulk import: {results['success']} success, {results['failed']} failed")
-        return results
-    
-    # ============= НОВЫЕ МЕТОДЫ v2.0: СТАТИСТИКА =============
+    # ============= СТАТИСТИКА =============
     
     async def get_views_stats(self, limit: int = 20) -> List[tuple]:
         """Получить статистику просмотров - ТОП постов"""
@@ -649,57 +583,10 @@ class CatalogService:
             logger.error(f"Error getting category stats: {e}")
             return {}
     
-    async def get_new_posts_count(self, days: int = 7) -> int:
-        """Количество новых постов за период"""
-        try:
-            async with db.get_session() as session:
-                since = datetime.utcnow() - timedelta(days=days)
-                
-                result = await session.execute(
-                    select(func.count(CatalogPost.id)).where(
-                        and_(
-                            CatalogPost.created_at >= since,
-                            CatalogPost.is_active == True
-                        )
-                    )
-                )
-                return result.scalar() or 0
-                
-        except Exception as e:
-            logger.error(f"Error getting new posts count: {e}")
-            return 0
-    
-    async def get_recent_posts(self, limit: int = 10) -> List[Dict]:
-        """Последние добавленные посты"""
-        try:
-            async with db.get_session() as session:
-                result = await session.execute(
-                    select(CatalogPost)
-                    .where(CatalogPost.is_active == True)
-                    .order_by(desc(CatalogPost.created_at))
-                    .limit(limit)
-                )
-                posts = result.scalars().all()
-                
-                return [
-                    {
-                        'id': p.id,
-                        'category': p.category,
-                        'name': p.name,
-                        'created_at': p.created_at.isoformat() if p.created_at else None
-                    }
-                    for p in posts
-                ]
-                
-        except Exception as e:
-            logger.error(f"Error getting recent posts: {e}")
-            return []
-    
     async def get_priority_stats(self) -> Dict:
         """Статистика по приоритетным постам"""
         try:
             async with db.get_session() as session:
-                # Приоритетные посты
                 result = await session.execute(
                     select(CatalogPost).where(
                         and_(
@@ -710,12 +597,10 @@ class CatalogService:
                 )
                 priority_posts = result.scalars().all()
                 
-                # CTR приоритетных
                 priority_views = sum(p.views for p in priority_posts)
                 priority_clicks = sum(p.clicks for p in priority_posts)
                 priority_ctr = (priority_clicks / priority_views * 100) if priority_views > 0 else 0
                 
-                # CTR обычных постов
                 result = await session.execute(
                     select(CatalogPost).where(
                         and_(
@@ -787,84 +672,15 @@ class CatalogService:
             logger.error(f"Error getting ad stats: {e}")
             return {'ads': [], 'total_views': 0, 'total_clicks': 0, 'avg_ctr': 0}
     
-    async def get_top_users(self, limit: int = 20) -> List[Dict]:
-        """Топ активных пользователей каталога"""
-        try:
-            async with db.get_session() as session:
-                result = await session.execute(
-                    select(
-                        CatalogSession.user_id,
-                        func.count(CatalogSession.id).label('activity_score')
-                    )
-                    .group_by(CatalogSession.user_id)
-                    .order_by(desc('activity_score'))
-                    .limit(limit)
-                )
-                
-                users_data = []
-                for user_id, activity in result.all():
-                    # Получаем подписки
-                    subs_result = await session.execute(
-                        select(func.count(CatalogSubscription.id)).where(
-                            CatalogSubscription.user_id == user_id
-                        )
-                    )
-                    subscriptions = subs_result.scalar() or 0
-                    
-                    # Получаем отзывы
-                    reviews_result = await session.execute(
-                        select(func.count(CatalogReview.id)).where(
-                            CatalogReview.user_id == user_id
-                        )
-                    )
-                    reviews = reviews_result.scalar() or 0
-                    
-                    users_data.append({
-                        'user_id': user_id,
-                        'username': f'user{user_id}',
-                        'activity_score': activity,
-                        'subscriptions': subscriptions,
-                        'reviews': reviews
-                    })
-                
-                return users_data
-                
-        except Exception as e:
-            logger.error(f"Error getting top users: {e}")
-            return []
-    
-    async def get_user_segments(self) -> Dict:
-        """Сегментация пользователей по активности"""
-        try:
-            async with db.get_session() as session:
-                result = await session.execute(
-                    select(func.count(CatalogSession.id))
-                )
-                total = result.scalar() or 0
-                
-                # Упрощённая сегментация
-                return {
-                    'super_active': int(total * 0.05),
-                    'active': int(total * 0.15),
-                    'moderate': int(total * 0.35),
-                    'inactive': int(total * 0.45)
-                }
-                
-        except Exception as e:
-            logger.error(f"Error getting user segments: {e}")
-            return {'super_active': 0, 'active': 0, 'moderate': 0, 'inactive': 0}
-    
     async def get_catalog_stats(self) -> Dict:
         """Получить полную статистику каталога"""
         try:
             async with db.get_session() as session:
-                # Общее количество постов
                 total_result = await session.execute(
                     select(func.count(CatalogPost.id)).where(CatalogPost.is_active == True)
                 )
                 total_posts = total_result.scalar()
                 
-                # Посты с медиа
                 media_result = await session.execute(
                     select(func.count(CatalogPost.id)).where(
                         and_(
@@ -875,7 +691,6 @@ class CatalogService:
                 )
                 posts_with_media = media_result.scalar()
                 
-                # Общие просмотры и клики
                 views_result = await session.execute(
                     select(func.sum(CatalogPost.views)).where(CatalogPost.is_active == True)
                 )
@@ -886,13 +701,11 @@ class CatalogService:
                 )
                 total_clicks = clicks_result.scalar() or 0
                 
-                # Активные сессии
                 sessions_result = await session.execute(
                     select(func.count(CatalogSession.id)).where(CatalogSession.session_active == True)
                 )
                 active_sessions = sessions_result.scalar()
                 
-                # Количество отзывов
                 reviews_result = await session.execute(
                     select(func.count(CatalogReview.id))
                 )
@@ -924,149 +737,57 @@ class CatalogService:
                 'total_reviews': 0
             }
     
-    # ============= НОВЫЕ МЕТОДЫ v2.0: ПЕРСОНАЛЬНЫЕ РЕКОМЕНДАЦИИ =============
+    # ============= НОВЫЕ МЕТОДЫ v3.0 =============
     
-    async def get_personalized_recommendations(self, user_id: int, count: int = 10) -> List[Dict]:
-        """Персональные рекомендации на основе активности пользователя"""
-        try:
-            async with db.get_session() as session:
-                # Получаем подписки пользователя
-                result = await session.execute(
-                    select(CatalogSubscription.subscription_value).where(
-                        CatalogSubscription.user_id == user_id
-                    )
-                )
-                user_categories = [row[0] for row in result.all()]
-                
-                if not user_categories:
-                    # Популярные посты если нет подписок
-                    result = await session.execute(
-                        select(CatalogPost)
-                        .where(CatalogPost.is_active == True)
-                        .order_by(desc(CatalogPost.views))
-                        .limit(count)
-                    )
-                else:
-                    # Посты из подписанных категорий
-                    result = await session.execute(
-                        select(CatalogPost).where(
-                            and_(
-                                CatalogPost.category.in_(user_categories),
-                                CatalogPost.is_active == True
-                            )
-                        ).order_by(func.random()).limit(count)
-                    )
-                
-                posts = result.scalars().all()
-                return [self._post_to_dict(p) for p in posts]
-                
-        except Exception as e:
-            logger.error(f"Error getting recommendations: {e}")
-            return []
-    
-    # ============= НОВЫЕ МЕТОДЫ v2.0: ИЗБРАННОЕ =============
-    
-    async def toggle_favorite(self, user_id: int, post_id: int) -> bool:
-        """Добавить/убрать из избранного"""
+    async def get_unique_viewers(self) -> int:
+        """Количество уникальных пользователей с просмотрами"""
         try:
             async with db.get_session() as session:
                 result = await session.execute(
-                    select(CatalogSession).where(CatalogSession.user_id == user_id)
-                )
-                user_session = result.scalar_one_or_none()
-                
-                if not user_session:
-                    user_session = CatalogSession(
-                        user_id=user_id,
-                        viewed_posts=[],
-                        favorites=[]
-                    )
-                    session.add(user_session)
-                
-                favorites = user_session.favorites or []
-                
-                if post_id in favorites:
-                    favorites.remove(post_id)
-                    action = 'removed'
-                else:
-                    favorites.append(post_id)
-                    action = 'added'
-                
-                user_session.favorites = favorites
-                await session.commit()
-                
-                logger.info(f"User {user_id} {action} post {post_id} to/from favorites")
-                return action == 'added'
-                
-        except Exception as e:
-            logger.error(f"Error toggling favorite: {e}")
-            return False
-    
-    async def get_user_favorites(self, user_id: int) -> List[Dict]:
-        """Получить избранное пользователя"""
-        try:
-            async with db.get_session() as session:
-                result = await session.execute(
-                    select(CatalogSession).where(CatalogSession.user_id == user_id)
-                )
-                user_session = result.scalar_one_or_none()
-                
-                if not user_session or not user_session.favorites:
-                    return []
-                
-                result = await session.execute(
-                    select(CatalogPost).where(
-                        and_(
-                            CatalogPost.id.in_(user_session.favorites),
-                            CatalogPost.is_active == True
-                        )
+                    select(func.count(func.distinct(CatalogSession.user_id))).where(
+                        func.json_array_length(CatalogSession.viewed_posts) > 0
                     )
                 )
-                posts = result.scalars().all()
-                
-                return [self._post_to_dict(p) for p in posts]
-                
+                return result.scalar() or 0
         except Exception as e:
-            logger.error(f"Error getting favorites: {e}")
-            return []
-    
-    async def clear_favorites(self, user_id: int) -> int:
-        """Очистить избранное"""
-        try:
-            async with db.get_session() as session:
-                result = await session.execute(
-                    select(CatalogSession).where(CatalogSession.user_id == user_id)
-                )
-                user_session = result.scalar_one_or_none()
-                
-                if not user_session:
-                    return 0
-                
-                count = len(user_session.favorites or [])
-                user_session.favorites = []
-                await session.commit()
-                
-                logger.info(f"Cleared {count} favorites for user {user_id}")
-                return count
-                
-        except Exception as e:
-            logger.error(f"Error clearing favorites: {e}")
+            logger.error(f"Error getting unique viewers: {e}")
             return 0
     
-    async def get_user_favorite_categories(self, user_id: int) -> List[str]:
-        """Категории из избранного пользователя"""
+    async def get_unique_clickers(self) -> int:
+        """Количество уникальных пользователей с переходами"""
         try:
-            favorites = await self.get_user_favorites(user_id)
-            categories = list(set([f['category'] for f in favorites]))
-            return sorted(categories)
-        except:
-            return []
+            async with db.get_session() as session:
+                result = await session.execute(
+                    select(func.count(func.distinct(CatalogPost.user_id))).where(
+                        CatalogPost.clicks > 0
+                    )
+                )
+                return result.scalar() or 0
+        except Exception as e:
+            logger.error(f"Error getting unique clickers: {e}")
+            return 0
     
-    async def generate_favorites_share_link(self, user_id: int) -> str:
-        """Сгенерировать ссылку для шаринга избранного"""
-        import base64
-        encoded = base64.b64encode(str(user_id).encode()).decode()
-        return f"https://t.me/YourBot?start=fav_{encoded}"
+    async def get_top_posts_with_clicks(self, limit: int = 20) -> List[tuple]:
+        """ТОП постов с просмотрами и переходами"""
+        try:
+            async with db.get_session() as session:
+                result = await session.execute(
+                    select(
+                        CatalogPost.id,
+                        CatalogPost.views,
+                        CatalogPost.clicks,
+                        CatalogPost.name
+                    ).where(CatalogPost.is_active == True)
+                    .order_by(CatalogPost.views.desc())
+                    .limit(limit)
+                )
+                
+                stats = result.all()
+                return stats
+                
+        except Exception as e:
+            logger.error(f"Error getting top posts: {e}")
+            return []
     
     # ============= ПРИОРИТЕТЫ И РЕКЛАМА =============
     
@@ -1075,7 +796,6 @@ class CatalogService:
         try:
             count = 0
             async with db.get_session() as session:
-                # Сбрасываем все приоритеты
                 posts_to_reset = (await session.execute(
                     select(CatalogPost).where(CatalogPost.is_priority == True)
                 )).scalars().all()
@@ -1083,7 +803,6 @@ class CatalogService:
                 for post in posts_to_reset:
                     post.is_priority = False
                 
-                # Устанавливаем новые приоритеты
                 for link in links[:self.max_priority_posts]:
                     result = await session.execute(
                         select(CatalogPost).where(CatalogPost.catalog_link == link)
@@ -1107,7 +826,7 @@ class CatalogService:
         try:
             async with db.get_session() as session:
                 post = CatalogPost(
-                    user_id=0,  # Системный пост
+                    user_id=0,
                     catalog_link=catalog_link,
                     category='Реклама',
                     name=description,
