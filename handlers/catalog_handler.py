@@ -28,16 +28,19 @@ logger = logging.getLogger(__name__)
 # ============= ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ =============
 
 async def extract_media_from_link(bot: Bot, telegram_link: str) -> Optional[Dict]:
-    """Автоматический импорт медиа из поста с уведомлениями о статусе"""
+    """Автоматический импорт медиа из поста с улучшенным логированием"""
     try:
         if not telegram_link or 't.me/' not in telegram_link:
+            logger.warning(f"Invalid link format: {telegram_link}")
             return {
                 'success': False,
                 'message': '❌ Неверная ссылка'
             }
         
+        # Извлекаем username канала и message_id
         match = re.search(r't\.me/([^/]+)/(\d+)', telegram_link)
         if not match:
+            logger.warning(f"Could not parse link: {telegram_link}")
             return {
                 'success': False,
                 'message': '❌ Не удалось извлечь данные из ссылки'
@@ -46,82 +49,118 @@ async def extract_media_from_link(bot: Bot, telegram_link: str) -> Optional[Dict
         channel_username = match.group(1)
         message_id = int(match.group(2))
         
+        logger.info(f"Parsing link: channel={channel_username}, msg_id={message_id}")
+        
+        # Формируем chat_id
         if channel_username.startswith('@'):
             channel_username = channel_username[1:]
         
-        chat_id = f"@{channel_username}" if not channel_username.startswith('-100') else int(channel_username)
+        # Если это числовой ID (начинается с -100)
+        if channel_username.startswith('-100'):
+            chat_id = int(channel_username)
+        else:
+            chat_id = f"@{channel_username}"
         
+        logger.info(f"Attempting to fetch from chat_id={chat_id}, message_id={message_id}")
+        
+        # МЕТОД 1: Пробуем через forwardMessage
         try:
-            message = await bot.forward_message(
+            logger.info("Method 1: Trying forwardMessage...")
+            forwarded = await bot.forward_message(
                 chat_id=bot.id,
                 from_chat_id=chat_id,
                 message_id=message_id
             )
             
             result = None
-            if message.photo:
+            if forwarded.photo:
                 result = {
                     'success': True,
                     'type': 'photo',
-                    'file_id': message.photo[-1].file_id,
-                    'media_group_id': message.media_group_id,
-                    'media_json': [message.photo[-1].file_id],
-                    'message': '✅ Фото успешно импортировано'
+                    'file_id': forwarded.photo[-1].file_id,
+                    'media_group_id': forwarded.media_group_id,
+                    'media_json': [forwarded.photo[-1].file_id],
+                    'message': '✅ Фото импортировано'
                 }
-            elif message.video:
+                logger.info(f"✅ Photo imported: {result['file_id'][:20]}...")
+            elif forwarded.video:
                 result = {
                     'success': True,
                     'type': 'video',
-                    'file_id': message.video.file_id,
-                    'media_group_id': message.media_group_id,
-                    'media_json': [message.video.file_id],
-                    'message': '✅ Видео успешно импортировано'
+                    'file_id': forwarded.video.file_id,
+                    'media_group_id': forwarded.media_group_id,
+                    'media_json': [forwarded.video.file_id],
+                    'message': '✅ Видео импортировано'
                 }
-            elif message.document:
+                logger.info(f"✅ Video imported: {result['file_id'][:20]}...")
+            elif forwarded.document:
                 result = {
                     'success': True,
                     'type': 'document',
-                    'file_id': message.document.file_id,
-                    'media_group_id': message.media_group_id,
-                    'media_json': [message.document.file_id],
-                    'message': '✅ Документ успешно импортирован'
+                    'file_id': forwarded.document.file_id,
+                    'media_group_id': forwarded.media_group_id,
+                    'media_json': [forwarded.document.file_id],
+                    'message': '✅ Документ импортирован'
                 }
-            elif message.animation:
+                logger.info(f"✅ Document imported: {result['file_id'][:20]}...")
+            elif forwarded.animation:
                 result = {
                     'success': True,
                     'type': 'animation',
-                    'file_id': message.animation.file_id,
-                    'media_group_id': message.media_group_id,
-                    'media_json': [message.animation.file_id],
-                    'message': '✅ Анимация успешно импортирована'
+                    'file_id': forwarded.animation.file_id,
+                    'media_group_id': forwarded.media_group_id,
+                    'media_json': [forwarded.animation.file_id],
+                    'message': '✅ Анимация импортирована'
                 }
+                logger.info(f"✅ Animation imported: {result['file_id'][:20]}...")
             else:
+                logger.warning("No media found in forwarded message")
                 result = {
                     'success': False,
-                    'message': '⚠️ Медиа не найдено. Добавьте вручную'
+                    'message': '⚠️ Медиа не найдено в посте'
                 }
             
+            # Удаляем пересланное сообщение
             try:
-                await bot.delete_message(chat_id=bot.id, message_id=message.message_id)
-            except:
-                pass
+                await bot.delete_message(chat_id=bot.id, message_id=forwarded.message_id)
+                logger.info("Cleaned up forwarded message")
+            except Exception as del_error:
+                logger.warning(f"Could not delete forwarded message: {del_error}")
             
-            if result:
-                logger.info(f"✅ Media extracted: {result.get('type', 'none')}, success: {result.get('success')}")
             return result
             
-        except TelegramError as e:
-            logger.error(f"Cannot access message: {e}")
-            return {
-                'success': False,
-                'message': f'❌ Ошибка доступа к посту. Добавьте медиа вручную'
-            }
+        except TelegramError as forward_error:
+            error_text = str(forward_error).lower()
+            logger.error(f"Method 1 failed: {forward_error}")
             
+            # Определяем причину ошибки
+            if 'forbidden' in error_text or 'chat not found' in error_text:
+                return {
+                    'success': False,
+                    'message': (
+                        '❌ Бот не может получить доступ к каналу\n\n'
+                        '**Решение:**\n'
+                        '1. Добавьте бота в канал как администратора\n'
+                        '2. Или загрузите медиа вручную\n'
+                        '3. Продолжайте заполнение, медиа можно добавить позже'
+                    )
+                }
+            elif 'message to forward not found' in error_text:
+                return {
+                    'success': False,
+                    'message': '❌ Сообщение не найдено (удалено или неверный ID)'
+                }
+            else:
+                return {
+                    'success': False,
+                    'message': f'⚠️ Не удалось импортировать медиа\n\nОшибка: {str(forward_error)[:100]}'
+                }
+        
     except Exception as e:
-        logger.error(f"Error extracting media: {e}")
+        logger.error(f"Critical error in extract_media_from_link: {e}", exc_info=True)
         return {
             'success': False,
-            'message': f'❌ Ошибка импорта. Добавьте медиа вручную'
+            'message': f'❌ Ошибка импорта: {str(e)[:100]}'
         }
 
 
