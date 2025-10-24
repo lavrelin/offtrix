@@ -1,25 +1,16 @@
 # -*- coding: utf-8 -*-
 """
-Handler для каталога услуг - УПРОЩЕННАЯ ВЕРСИЯ
-Основные команды:
-- /catalog - просмотр постов
-- /search - поиск по категориям
-- /review [id] - оставить отзыв
-- /categoryfollow - управление подписками
-- /addtocatalog - добавить пост (админ)
-- /catalogedit [id] - редактировать (админ)
-- /remove [id] - удалить (админ)
-- /catalogpriority - приоритетные посты (админ)
-- /addcatalogreklama - реклама (админ)
-- /catalogview - статистика просмотров (админ)
-- /catalogviews - ТОП-20 (админ)
-- /catalog_stats_users - общая статистика (админ)
-- /catalog_stats_categories - по категориям (админ)
-- /catalog_stats_popular - ТОП-10 (админ)
-- /catalog_stats_priority - статистика приоритетов (админ)
-- /catalog_stats_reklama - статистика рекламы (админ)
+Handler для каталога услуг - ИСПРАВЛЕННАЯ ВЕРСИЯ 3.1
 
-Версия: 3.0.0 - Упрощенная
+Исправления:
+- ✅ Исправлен callback catalog:add_cat
+- ✅ Добавлена система выбора звезд для отзывов
+- ✅ Уникальные номера постов 1-9999
+- ✅ Новый формат карточек с номером и рейтингом
+- ✅ Команда изменения номера (админ)
+
+Версия: 3.1.0
+Дата: 24.10.2025
 """
 import logging
 import re
@@ -88,12 +79,15 @@ async def extract_media_from_link(bot: Bot, telegram_link: str) -> Optional[Dict
 
 
 async def send_catalog_post_with_media(bot: Bot, chat_id: int, post: Dict, index: int, total: int) -> bool:
-    """Отправка карточки каталога БЕЗ статистики для пользователей"""
+    """Отправка карточки каталога С НОВЫМ ФОРМАТОМ"""
     try:
-        card_text = f"🆔 **Пост #{index} из {total}**\n\n"
+        # ============= НОВЫЙ ФОРМАТ КАРТОЧКИ =============
+        catalog_number = post.get('catalog_number', '????')
+        card_text = f"#️⃣ **Пост {catalog_number}**\n\n"
         card_text += f"📂 {post.get('category', 'Не указана')}\n"
-        card_text += f"📝 {post.get('name', 'Без названия')}\n\n"
+        card_text += f"ℹ️ {post.get('name', 'Без названия')}\n\n"
         
+        # Теги
         tags = post.get('tags', [])
         if tags and isinstance(tags, list):
             tags_formatted = []
@@ -104,11 +98,16 @@ async def send_catalog_post_with_media(bot: Bot, chat_id: int, post: Dict, index
                         tags_formatted.append(f"#{clean_tag}")
             
             if tags_formatted:
-                card_text += f"{' '.join(tags_formatted)}\n\n"
+                card_text += f"{' '.join(tags_formatted)}\n"
         
-        # Добавляем рейтинг если есть
-        if post.get('rating') and post.get('review_count'):
-            card_text += f"⭐ {post.get('rating'):.1f} ({post.get('review_count')} отзывов)\n"
+        # Рейтинг (только если 10+ отзывов)
+        review_count = post.get('review_count', 0)
+        if review_count >= 10:
+            rating = post.get('rating', 0)
+            stars = "⭐" * int(rating)
+            card_text += f"**Rating**: {stars} {rating:.1f} ({review_count} отзывов)\n"
+        else:
+            card_text += f"**Rating**: -\n"
         
         # НОВЫЕ КНОПКИ
         keyboard = [
@@ -201,8 +200,11 @@ async def notify_subscribers_about_new_post(bot: Bot, post_id: int, category: st
             logger.error(f"Post {post_id} not found for notification")
             return
         
+        catalog_number = post.get('catalog_number', '????')
+        
         text = (
             f"🆕 **НОВЫЙ ПОСТ В КАТЕГОРИИ**\n\n"
+            f"#️⃣ Пост {catalog_number}\n"
             f"📂 {category}\n"
             f"📝 {post.get('name', 'Без названия')}\n\n"
             f"🔗 Перейти: {post.get('catalog_link')}\n\n"
@@ -286,18 +288,43 @@ async def review_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.args or not context.args[0].isdigit():
         await update.message.reply_text(
             "🔄 Использование: `/review [номер]`\n\n"
-            "Пример: `/review 123`",
+            "Пример: `/review 1234`",
             parse_mode='Markdown'
         )
         return
     
-    post_id = int(context.args[0])
-    context.user_data['catalog_review'] = {'post_id': post_id, 'waiting': True}
-    keyboard = [[InlineKeyboardButton("⏮️ Отмена", callback_data="catalog:cancel_review")]]
+    # Ищем по catalog_number
+    catalog_number = int(context.args[0])
+    post = await catalog_service.get_post_by_number(catalog_number)
+    
+    if not post:
+        await update.message.reply_text(f"❌ Пост #{catalog_number} не найден")
+        return
+    
+    # Показываем выбор звезд
+    context.user_data['catalog_review'] = {
+        'post_id': post['id'],
+        'catalog_number': catalog_number,
+        'step': 'rating'
+    }
+    
+    keyboard = [
+        [
+            InlineKeyboardButton("⭐", callback_data="catalog:rate:1"),
+            InlineKeyboardButton("⭐⭐", callback_data="catalog:rate:2"),
+            InlineKeyboardButton("⭐⭐⭐", callback_data="catalog:rate:3")
+        ],
+        [
+            InlineKeyboardButton("⭐⭐⭐⭐", callback_data="catalog:rate:4"),
+            InlineKeyboardButton("⭐⭐⭐⭐⭐", callback_data="catalog:rate:5")
+        ],
+        [InlineKeyboardButton("⏮️ Отмена", callback_data="catalog:cancel_review")]
+    ]
+    
     await update.message.reply_text(
-        f"🖋️ **ОТЗЫВ**\n\n"
-        f"ID: {post_id}\n\n"
-        "Введите отзыв (макс. 500 символов):",
+        f"🌟 **ОЦЕНКА ПОСТА #{catalog_number}**\n\n"
+        f"📝 {post.get('name', 'Без названия')}\n\n"
+        "Выберите оценку:",
         reply_markup=InlineKeyboardMarkup(keyboard),
         parse_mode='Markdown'
     )
@@ -361,51 +388,87 @@ async def edit_catalog_command(update: Update, context: ContextTypes.DEFAULT_TYP
     
     if not context.args or not context.args[0].isdigit():
         await update.message.reply_text(
-            "🔄 Использование: `/catalogedit [id]`\n\n"
-            "Пример: `/catalogedit 123`",
+            "🔄 Использование: `/catalogedit [номер]`\n\n"
+            "Пример: `/catalogedit 1234`",
             parse_mode='Markdown'
         )
         return
     
-    post_id = int(context.args[0])
+    catalog_number = int(context.args[0])
+    post = await catalog_service.get_post_by_number(catalog_number)
     
-    try:
-        post = await catalog_service.get_post_by_id(post_id)
-        
-        if not post:
-            await update.message.reply_text(f"❌ Пост #{post_id} не найден")
-            return
-        
-        context.user_data['catalog_edit'] = {'post_id': post_id, 'post_data': post}
-        
-        text = (
-            f"🛠️ **Редактирование поста #{post_id}**\n\n"
-            f"📂 Категория: {post.get('category')}\n"
-            f"📝 Название: {post.get('name')}\n"
-            f"🏷️ Теги: {', '.join(post.get('tags', []))}\n"
-            f"🔗 Ссылка: {post.get('catalog_link')}\n\n"
-            "Что изменить?"
-        )
-        
-        keyboard = [
-            [InlineKeyboardButton("✏️ Категорию", callback_data="catalog:edit:category")],
-            [InlineKeyboardButton("📝 Название", callback_data="catalog:edit:name")],
-            [InlineKeyboardButton("🏷️ Теги", callback_data="catalog:edit:tags")],
-            [InlineKeyboardButton("🔗 Ссылку", callback_data="catalog:edit:link")],
-            [InlineKeyboardButton("📸 Медиа", callback_data="catalog:edit:media")],
-            [InlineKeyboardButton("⭐ Приоритет", callback_data="catalog:edit:priority")],
-            [InlineKeyboardButton("❌ Отменить", callback_data="catalog:edit_cancel")]
-        ]
-        
+    if not post:
+        await update.message.reply_text(f"❌ Пост #{catalog_number} не найден")
+        return
+    
+    context.user_data['catalog_edit'] = {'post_id': post['id'], 'post_data': post, 'catalog_number': catalog_number}
+    
+    text = (
+        f"🛠️ **Редактирование поста #{catalog_number}**\n\n"
+        f"📂 Категория: {post.get('category')}\n"
+        f"📝 Название: {post.get('name')}\n"
+        f"🏷️ Теги: {', '.join(post.get('tags', []))}\n"
+        f"🔗 Ссылка: {post.get('catalog_link')}\n\n"
+        "Что изменить?"
+    )
+    
+    keyboard = [
+        [InlineKeyboardButton("✏️ Категорию", callback_data="catalog:edit:category")],
+        [InlineKeyboardButton("📝 Название", callback_data="catalog:edit:name")],
+        [InlineKeyboardButton("🏷️ Теги", callback_data="catalog:edit:tags")],
+        [InlineKeyboardButton("🔗 Ссылку", callback_data="catalog:edit:link")],
+        [InlineKeyboardButton("📸 Медиа", callback_data="catalog:edit:media")],
+        [InlineKeyboardButton("#️⃣ Номер", callback_data="catalog:edit:number")],
+        [InlineKeyboardButton("⭐ Приоритет", callback_data="catalog:edit:priority")],
+        [InlineKeyboardButton("❌ Отменить", callback_data="catalog:edit_cancel")]
+    ]
+    
+    await update.message.reply_text(
+        text,
+        reply_markup=InlineKeyboardMarkup(keyboard),
+        parse_mode='Markdown'
+    )
+
+
+async def change_catalog_number_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Изменить номер поста - /changenumber [старый] [новый]"""
+    if not Config.is_admin(update.effective_user.id):
+        await update.message.reply_text("❌ Команда только для администраторов")
+        return
+    
+    if not context.args or len(context.args) < 2:
         await update.message.reply_text(
-            text,
-            reply_markup=InlineKeyboardMarkup(keyboard),
+            "🔄 Использование: `/changenumber [старый] [новый]`\n\n"
+            "Пример: `/changenumber 1234 5678`",
             parse_mode='Markdown'
         )
+        return
+    
+    try:
+        old_number = int(context.args[0])
+        new_number = int(context.args[1])
         
-    except Exception as e:
-        logger.error(f"Error in edit_catalog: {e}")
-        await update.message.reply_text("❌ Ошибка при загрузке поста")
+        if new_number < 1 or new_number > 9999:
+            await update.message.reply_text("❌ Новый номер должен быть от 1 до 9999")
+            return
+        
+        success = await catalog_service.change_catalog_number(old_number, new_number)
+        
+        if success:
+            await update.message.reply_text(
+                f"✅ Номер изменён!\n\n"
+                f"#{old_number} → #{new_number}"
+            )
+        else:
+            await update.message.reply_text(
+                f"❌ Ошибка!\n\n"
+                f"Возможные причины:\n"
+                f"• Пост #{old_number} не найден\n"
+                f"• Номер #{new_number} уже занят"
+            )
+            
+    except ValueError:
+        await update.message.reply_text("❌ Номера должны быть числами")
 
 
 async def remove_catalog_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -416,45 +479,39 @@ async def remove_catalog_command(update: Update, context: ContextTypes.DEFAULT_T
     
     if not context.args or not context.args[0].isdigit():
         await update.message.reply_text(
-            "🔄 Использование: `/remove [id]`\n\n"
-            "Пример: `/remove 123`",
+            "🔄 Использование: `/remove [номер]`\n\n"
+            "Пример: `/remove 1234`",
             parse_mode='Markdown'
         )
         return
     
-    post_id = int(context.args[0])
+    catalog_number = int(context.args[0])
+    post = await catalog_service.get_post_by_number(catalog_number)
     
-    try:
-        post = await catalog_service.get_post_by_id(post_id)
-        
-        if not post:
-            await update.message.reply_text(f"❌ Пост #{post_id} не найден")
-            return
-        
-        text = (
-            f"⚠️ **Удаление поста #{post_id}**\n\n"
-            f"📋 Название: {post.get('name')}\n"
-            f"📂 Категория: {post.get('category')}\n"
-            f"👁️ Просмотры: {post.get('views', 0)}\n\n"
-            "Вы уверены?"
-        )
-        
-        keyboard = [
-            [
-                InlineKeyboardButton("✅ Удалить", callback_data=f"catalog:remove_confirm:{post_id}"),
-                InlineKeyboardButton("❌ Отменить", callback_data="catalog:remove_cancel")
-            ]
+    if not post:
+        await update.message.reply_text(f"❌ Пост #{catalog_number} не найден")
+        return
+    
+    text = (
+        f"⚠️ **Удаление поста #{catalog_number}**\n\n"
+        f"📋 Название: {post.get('name')}\n"
+        f"📂 Категория: {post.get('category')}\n"
+        f"👁️ Просмотры: {post.get('views', 0)}\n\n"
+        "Вы уверены?"
+    )
+    
+    keyboard = [
+        [
+            InlineKeyboardButton("✅ Удалить", callback_data=f"catalog:remove_confirm:{post['id']}"),
+            InlineKeyboardButton("❌ Отменить", callback_data="catalog:remove_cancel")
         ]
-        
-        await update.message.reply_text(
-            text,
-            reply_markup=InlineKeyboardMarkup(keyboard),
-            parse_mode='Markdown'
-        )
-        
-    except Exception as e:
-        logger.error(f"Error in remove_catalog: {e}")
-        await update.message.reply_text("❌ Ошибка при загрузке поста")
+    ]
+    
+    await update.message.reply_text(
+        text,
+        reply_markup=InlineKeyboardMarkup(keyboard),
+        parse_mode='Markdown'
+    )
 
 
 async def catalogpriority_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -504,10 +561,10 @@ async def catalogview_command(update: Update, context: ContextTypes.DEFAULT_TYPE
         text += f"🖱 Уникальных пользователей с переходами: {unique_clickers}\n\n"
         text += "📈 **ТОП-20 ПОСТОВ:**\n\n"
         
-        for idx, (post_id, views, clicks, name) in enumerate(top_posts, 1):
+        for idx, (post_id, views, clicks, name, catalog_number) in enumerate(top_posts, 1):
             emoji = "🥇" if idx == 1 else "🥈" if idx == 2 else "🥉" if idx == 3 else f"{idx}."
             ctr = (clicks / views * 100) if views > 0 else 0
-            text += f"{emoji} #{post_id} - {name[:25]}...\n"
+            text += f"{emoji} #{catalog_number} - {name[:25]}...\n"
             text += f"   👁 {views} | 🖱 {clicks} | CTR: {ctr:.1f}%\n\n"
         
         await update.message.reply_text(text, parse_mode='Markdown')
@@ -530,9 +587,9 @@ async def catalogviews_command(update: Update, context: ContextTypes.DEFAULT_TYP
             return
         
         text = "📊 **ТОП-20 ПО ПРОСМОТРАМ**\n\n"
-        for idx, (post_id, views, name) in enumerate(stats, 1):
+        for idx, (post_id, views, name, catalog_number) in enumerate(stats, 1):
             emoji = "🥇" if idx == 1 else "🥈" if idx == 2 else "🥉" if idx == 3 else "▪️"
-            text += f"{emoji} #{post_id}: {views} 👁 - {name[:30]}...\n"
+            text += f"{emoji} #{catalog_number}: {views} 👁 - {name[:30]}...\n"
         
         await update.message.reply_text(text, parse_mode='Markdown')
     except Exception as e:
@@ -600,9 +657,9 @@ async def catalog_stats_popular_command(update: Update, context: ContextTypes.DE
             return
         
         text = "🏆 **ТОП-10**\n\n"
-        for idx, (post_id, views, name) in enumerate(stats, 1):
+        for idx, (post_id, views, name, catalog_number) in enumerate(stats, 1):
             emoji = ["🥇", "🥈", "🥉"][idx-1] if idx <= 3 else f"{idx}."
-            text += f"{emoji} {name[:30]}... - {views} 👁\n"
+            text += f"{emoji} #{catalog_number} {name[:30]}... - {views} 👁\n"
         
         await update.message.reply_text(text, parse_mode='Markdown')
     except Exception as e:
@@ -633,9 +690,10 @@ async def catalog_stats_priority_command(update: Update, context: ContextTypes.D
         for idx, post in enumerate(posts, 1):
             emoji = ["🥇", "🥈", "🥉"][idx-1] if idx <= 3 else f"{idx}️⃣"
             ctr = (post['clicks'] / post['views'] * 100) if post['views'] > 0 else 0
+            catalog_number = post.get('catalog_number', '????')
             
             text += (
-                f"{emoji} #{post['id']} | {post['name'][:20]}...\n"
+                f"{emoji} #{catalog_number} | {post['name'][:20]}...\n"
                 f"   👁 {post['views']} | 🖱 {post['clicks']} ({ctr:.1f}%)\n\n"
             )
         
@@ -684,9 +742,10 @@ async def catalog_stats_reklama_command(update: Update, context: ContextTypes.DE
         
         for idx, ad in enumerate(ads, 1):
             ctr = (ad['clicks'] / ad['views'] * 100) if ad['views'] > 0 else 0
+            catalog_number = ad.get('catalog_number', '????')
             
             text += (
-                f"{idx}️⃣ {ad['name'][:25]}...\n"
+                f"{idx}️⃣ #{catalog_number} {ad['name'][:25]}...\n"
                 f"   👁 {ad['views']} | 🖱 {ad['clicks']}\n"
                 f"   📈 CTR: {ctr:.1f}%\n\n"
             )
@@ -780,6 +839,44 @@ async def handle_catalog_callback(update: Update, context: ContextTypes.DEFAULT_
         post_id = int(data[2]) if len(data) > 2 else None
         if post_id:
             await catalog_service.increment_clicks(post_id, user_id)
+    
+    # ============= ИСПРАВЛЕНИЕ: CALLBACK ДЛЯ ВЫБОРА КАТЕГОРИИ ПРИ ДОБАВЛЕНИИ =============
+    elif action == "add_cat":
+        if 'catalog_add' not in context.user_data:
+            await query.answer("❌ Сессия истекла", show_alert=True)
+            return
+        
+        category = ":".join(data[2:])
+        context.user_data['catalog_add']['category'] = category
+        context.user_data['catalog_add']['step'] = 'name'
+        
+        await query.edit_message_text(
+            f"✅ Категория: {category}\n\n"
+            f"📝 Шаг 3/5\n\n"
+            f"Название (до 255 символов):"
+        )
+    
+    # ============= ОТЗЫВЫ С ВЫБОРОМ ЗВЕЗД =============
+    elif action == "rate":
+        if 'catalog_review' not in context.user_data:
+            await query.answer("❌ Сессия истекла", show_alert=True)
+            return
+        
+        rating = int(data[2]) if len(data) > 2 else 5
+        context.user_data['catalog_review']['rating'] = rating
+        context.user_data['catalog_review']['step'] = 'text'
+        
+        stars = "⭐" * rating
+        catalog_number = context.user_data['catalog_review'].get('catalog_number')
+        
+        keyboard = [[InlineKeyboardButton("⏮️ Отмена", callback_data="catalog:cancel_review")]]
+        
+        await query.edit_message_text(
+            f"✅ Оценка: {stars}\n\n"
+            f"📝 Пост #{catalog_number}\n\n"
+            f"Теперь напишите текст отзыва (макс. 500 символов):",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
     
     elif action == "cancel_review":
         context.user_data.pop('catalog_review', None)
@@ -949,14 +1046,18 @@ async def handle_catalog_callback(update: Update, context: ContextTypes.DEFAULT_
         reviews = await catalog_service.get_reviews(post_id, limit=100)
         count = len(reviews)
         
+        # Получаем информацию о посте
+        post = await catalog_service.get_post_by_id(post_id)
+        catalog_number = post.get('catalog_number', '????') if post else '????'
+        
         keyboard = [
             [InlineKeyboardButton(f"👀 Смотреть отзывы ({count})", callback_data=f"catalog:view_reviews:{post_id}")],
-            [InlineKeyboardButton("✍️ Оставить отзыв", callback_data=f"catalog:write_review:{post_id}")],
+            [InlineKeyboardButton("✍️ Оставить отзыв", callback_data=f"catalog:write_review:{post_id}:{catalog_number}")],
             [InlineKeyboardButton("❌ Закрыть", callback_data="catalog:close_menu")]
         ]
         
         await query.edit_message_text(
-            f"🧑‍🧒‍🧒 **ОТЗЫВЫ О ПОСТЕ #{post_id}**\n\n"
+            f"🧑‍🧒‍🧒 **ОТЗЫВЫ О ПОСТЕ #{catalog_number}**\n\n"
             f"Всего отзывов: {count}\n\n"
             "Выберите действие:",
             reply_markup=InlineKeyboardMarkup(keyboard),
@@ -969,15 +1070,17 @@ async def handle_catalog_callback(update: Update, context: ContextTypes.DEFAULT_
             return
         
         reviews = await catalog_service.get_reviews(post_id, limit=10)
+        post = await catalog_service.get_post_by_id(post_id)
+        catalog_number = post.get('catalog_number', '????') if post else '????'
         
         if not reviews:
             await query.edit_message_text(
-                f"📝 Отзывов о посте #{post_id} пока нет\n\n"
+                f"📝 Отзывов о посте #{catalog_number} пока нет\n\n"
                 "/catalog - продолжить просмотр"
             )
             return
         
-        text = f"👀 **ОТЗЫВЫ О ПОСТЕ #{post_id}**\n\n"
+        text = f"👀 **ОТЗЫВЫ О ПОСТЕ #{catalog_number}**\n\n"
         
         for idx, review in enumerate(reviews, 1):
             username = review.get('username', 'Аноним')
@@ -986,7 +1089,7 @@ async def handle_catalog_callback(update: Update, context: ContextTypes.DEFAULT_
             text += f"   {review.get('review_text', 'Без текста')[:100]}\n\n"
         
         keyboard = [
-            [InlineKeyboardButton("✍️ Оставить отзыв", callback_data=f"catalog:write_review:{post_id}")],
+            [InlineKeyboardButton("✍️ Оставить отзыв", callback_data=f"catalog:write_review:{post_id}:{catalog_number}")],
             [InlineKeyboardButton("⬅️ Назад", callback_data=f"catalog:reviews_menu:{post_id}")]
         ]
         
@@ -998,16 +1101,33 @@ async def handle_catalog_callback(update: Update, context: ContextTypes.DEFAULT_
     
     elif action == "write_review":
         post_id = int(data[2]) if len(data) > 2 else None
+        catalog_number = int(data[3]) if len(data) > 3 else None
         if not post_id:
             return
         
-        context.user_data['catalog_review'] = {'post_id': post_id, 'waiting': True}
-        keyboard = [[InlineKeyboardButton("❌ Отмена", callback_data="catalog:cancel_review")]]
+        # Сначала выбор звезд
+        context.user_data['catalog_review'] = {
+            'post_id': post_id,
+            'catalog_number': catalog_number,
+            'step': 'rating'
+        }
         
-        await query.message.reply_text(
-            f"✍️ **НАПИСАТЬ ОТЗЫВ**\n\n"
-            f"Пост #{post_id}\n\n"
-            "Введите ваш отзыв (макс. 500 символов):",
+        keyboard = [
+            [
+                InlineKeyboardButton("⭐", callback_data="catalog:rate:1"),
+                InlineKeyboardButton("⭐⭐", callback_data="catalog:rate:2"),
+                InlineKeyboardButton("⭐⭐⭐", callback_data="catalog:rate:3")
+            ],
+            [
+                InlineKeyboardButton("⭐⭐⭐⭐", callback_data="catalog:rate:4"),
+                InlineKeyboardButton("⭐⭐⭐⭐⭐", callback_data="catalog:rate:5")
+            ],
+            [InlineKeyboardButton("❌ Отмена", callback_data="catalog:cancel_review")]
+        ]
+        
+        await query.edit_message_text(
+            f"🌟 **ОЦЕНКА ПОСТА #{catalog_number}**\n\n"
+            "Выберите оценку:",
             reply_markup=InlineKeyboardMarkup(keyboard),
             parse_mode='Markdown'
         )
@@ -1019,7 +1139,7 @@ async def handle_catalog_callback(update: Update, context: ContextTypes.DEFAULT_
         if post_id:
             success = await catalog_service.delete_post(post_id, user_id)
             await query.edit_message_text(
-                f"🗑️ Пост #{post_id} удалён" if success else "❌ Ошибка"
+                f"🗑️ Пост удалён" if success else "❌ Ошибка"
             )
     
     elif action == "remove_cancel":
@@ -1041,7 +1161,8 @@ async def handle_catalog_callback(update: Update, context: ContextTypes.DEFAULT_
             'name': "Введите новое название:",
             'tags': "Введите новые теги через запятую:",
             'link': "Введите новую ссылку:",
-            'media': "Отправьте новое медиа:"
+            'media': "Отправьте новое медиа:",
+            'number': "Введите новый номер (1-9999):"
         }
         
         await query.edit_message_text(prompts.get(field, "Введите новое значение:"))
@@ -1061,21 +1182,24 @@ async def handle_catalog_text(update: Update, context: ContextTypes.DEFAULT_TYPE
     user_id = update.effective_user.id
     text = update.message.text
     
-    # Обработка отзыва
-    if 'catalog_review' in context.user_data and context.user_data['catalog_review'].get('waiting'):
+    # Обработка отзыва (ТЕКСТ ПОСЛЕ ВЫБОРА ЗВЕЗД)
+    if 'catalog_review' in context.user_data and context.user_data['catalog_review'].get('step') == 'text':
         post_id = context.user_data['catalog_review'].get('post_id')
+        rating = context.user_data['catalog_review'].get('rating', 5)
         
         review_id = await catalog_service.add_review(
             post_id=post_id,
             user_id=user_id,
             review_text=text[:500],
-            rating=5,
+            rating=rating,
             username=update.effective_user.username
         )
         
         if review_id:
+            stars = "⭐" * rating
             await update.message.reply_text(
                 f"✅ Отзыв добавлен!\n\n"
+                f"Оценка: {stars}\n\n"
                 f"/catalog - продолжить просмотр"
             )
         else:
@@ -1136,8 +1260,12 @@ async def handle_catalog_text(update: Update, context: ContextTypes.DEFAULT_TYPE
             )
             
             if post_id:
+                # Получаем номер поста
+                post = await catalog_service.get_post_by_id(post_id)
+                catalog_number = post.get('catalog_number', '????')
+                
                 await update.message.reply_text(
-                    f"✅ Пост #{post_id} добавлен в каталог!\n\n"
+                    f"✅ Пост #{catalog_number} добавлен в каталог!\n\n"
                     f"📂 {data['category']}\n"
                     f"📝 {data['name']}\n"
                     f"🏷️ {len(tags)} тегов\n"
@@ -1217,6 +1345,21 @@ async def handle_catalog_text(update: Update, context: ContextTypes.DEFAULT_TYPE
             else:
                 await update.message.reply_text("❌ Ссылка должна начинаться с https://t.me/")
             context.user_data.pop('catalog_edit', None)
+        
+        elif field == 'number':
+            try:
+                new_number = int(text)
+                if new_number < 1 or new_number > 9999:
+                    await update.message.reply_text("❌ Номер должен быть от 1 до 9999")
+                else:
+                    success = await catalog_service.update_post_field(post_id, 'catalog_number', new_number)
+                    if success:
+                        await update.message.reply_text(f"✅ Номер изменён на #{new_number}")
+                    else:
+                        await update.message.reply_text("❌ Этот номер уже занят или произошла ошибка")
+            except ValueError:
+                await update.message.reply_text("❌ Введите число от 1 до 9999")
+            context.user_data.pop('catalog_edit', None)
 
 
 __all__ = [
@@ -1238,5 +1381,6 @@ __all__ = [
     'catalog_stats_reklama_command',
     'handle_catalog_callback',
     'handle_catalog_text',
-    'handle_catalog_media'
+    'handle_catalog_media',
+    'change_catalog_number_command'
 ]
