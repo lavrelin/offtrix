@@ -195,6 +195,21 @@ __all__ = [
     'catalog_stats_popular_command',
     'handle_catalog_callback',
     'handle_catalog_text',
+    __all__ = [
+    # ... существующие ...
+    
+    # Catalog v2.0
+    'mysubscriptions_command',
+    'edit_catalog_command',
+    'remove_catalog_command',
+    'bulkimport_command',
+    'catalog_stats_new_command',
+    'catalog_stats_priority_command',
+    'catalog_stats_reklama_command',
+    'catalog_stats_topusers_command',
+    'catalog_stats_export_command',
+    'foryou_command',
+    'favorites_command',
     
     # Games
     'wordadd_command',
