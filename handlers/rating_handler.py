@@ -81,8 +81,8 @@ async def handle_rate_profile(update: Update, context: ContextTypes.DEFAULT_TYPE
     
     keyboard = [
         [
-            InlineKeyboardButton("🦸‍♂️ Boy", callback_data="rate:gender:boy"),
-            InlineKeyboardButton("🦸‍♀️ Girl", callback_data="rate:gender:girl")
+            InlineKeyboardButton("🙋🏼‍♂️ Man", callback_data="rate:gender:boy"),
+            InlineKeyboardButton("🙋🏼‍♀️ Girl", callback_data="rate:gender:girl")
         ],
         [
             InlineKeyboardButton("❓ Непонятно", callback_data="rate:gender:unknown"),
@@ -91,9 +91,9 @@ async def handle_rate_profile(update: Update, context: ContextTypes.DEFAULT_TYPE
     ]
     
     text = (
-        "🪪 Profile: " + profile_url + "\n\n"
+        "🆔 Ваш аккаунт: " + profile_url + "\n\n"
         "Укажите пол\n\n"
-        "🙋🏼‍♂️ Man? /🙋🏼‍♀️ Girl? "
+        "🙋🏼‍♂️ /🙋🏼‍♀️  "
     )
     
     await update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
