@@ -74,7 +74,6 @@ from handlers.catalog_handler import (
     handle_catalog_text,
     handle_catalog_media,# ← ДОБАВЬТЕ ЭТУ СТРОКУ
     change_catalog_number_command,
-    test_media_import_command
     addgirltocat_command,
     addboytocat_command,
 )
@@ -534,7 +533,6 @@ def main():
     application.add_handler(CommandHandler("changenumber", change_catalog_number_command))
     application.add_handler(CommandHandler("addgirltocat", addgirltocat_command))
     application.add_handler(CommandHandler("addboytocat", addboytocat_command))
-    application.add_handler(CommandHandler("testmediaimport", test_media_import_command))
     # Stats commands
     application.add_handler(CommandHandler("channelstats", channelstats_command))
     application.add_handler(CommandHandler("fullstats", fullstats_command))
