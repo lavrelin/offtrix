@@ -1474,9 +1474,21 @@ async def handle_catalog_text(update: Update, context: ContextTypes.DEFAULT_TYPE
         step = data.get('step')
         
         if step == 'link':
-            if text.startswith('https://t.me/'):
-                data['catalog_link'] = text
-                data['step'] = 'category'
+    if text.startswith('https://t.me/'):
+        data['catalog_link'] = text
+        
+        # ВАЖНО: Импортируем медиа
+        media_result = await extract_media_from_link(context.bot, text)
+        
+        if media_result and media_result.get('success'):
+            data['media_type'] = media_result['type']
+            data['media_file_id'] = media_result['file_id']
+            # ...
+            await update.message.reply_text(f"✅ {media_result['message']}")
+        else:
+            await update.message.reply_text("⚠️ Медиа не импортировано")
+        
+        data['step'] = 'category'
                 
                 # Пытаемся извлечь медиа
                 media_result = await extract_media_from_link(context.bot, text)
