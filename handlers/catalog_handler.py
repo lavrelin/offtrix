@@ -1,15 +1,14 @@
 # -*- coding: utf-8 -*-
 """
-Handler для каталога услуг - ОБНОВЛЕННАЯ ВЕРСИЯ 3.2
+Handler для каталога услуг - ИСПРАВЛЕННАЯ ВЕРСИЯ 4.1
 
-Обновления:
-- ✅ Новые команды /addgirltocat и /addboytocat
-- ✅ Улучшенный импорт медиа с уведомлениями
-- ✅ Обновленный поиск только по словам и тегам
-- ✅ Смешанная выдача постов (4 обычных + 1 Top)
-- ✅ Уведомления админу при новых отзывах
+Исправления:
+- ✅ Медиа автоматически импортируется и НЕ затирается
+- ✅ Пропуск шага загрузки медиа если оно уже импортировано
+- ✅ Улучшенные сообщения о статусе импорта
+- ✅ Команда /skip для пропуска медиа
 
-Версия: 3.2.0
+Версия: 4.1.0
 Дата: 24.10.2025
 """
 import logging
@@ -1335,7 +1334,7 @@ async def handle_catalog_callback(update: Update, context: ContextTypes.DEFAULT_
 # ============= TEXT HANDLER =============
 
 async def handle_catalog_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Обработчик текста"""
+    """Обработчик текста - С ИСПРАВЛЕННОЙ ЛОГИКОЙ ИМПОРТА МЕДИА"""
     user_id = update.effective_user.id
     text = update.message.text
     
@@ -1364,16 +1363,18 @@ async def handle_catalog_text(update: Update, context: ContextTypes.DEFAULT_TYPE
         context.user_data.pop('catalog_search', None)
         return
     
-    # ============= ОБРАБОТКА TOP ПОСТОВ =============
-    if 'catalog_add_top' in context.user_data:
-        data = context.user_data['catalog_add_top']
+    # Добавление поста - ИСПРАВЛЕННАЯ ЛОГИКА
+    if 'catalog_add' in context.user_data:
+        data = context.user_data['catalog_add']
         step = data.get('step')
-        
+
         if step == 'link':
             if text.startswith('https://t.me/'):
                 data['catalog_link'] = text
                 
-                # Пытаемся импортировать медиа с уведомлением
+                # ✅ ИМПОРТИРУЕМ МЕДИА С УВЕДОМЛЕНИЕМ
+                await update.message.reply_text("⏳ Импортирую медиа из поста...")
+                
                 media_result = await extract_media_from_link(context.bot, text)
                 
                 if media_result and media_result.get('success'):
@@ -1382,124 +1383,28 @@ async def handle_catalog_text(update: Update, context: ContextTypes.DEFAULT_TYPE
                     data['media_group_id'] = media_result.get('media_group_id')
                     data['media_json'] = media_result.get('media_json', [])
                     
-                    await update.message.reply_text(f"{media_result['message']}")
+                    media_emoji = {
+                        'photo': '📸', 
+                        'video': '🎬', 
+                        'document': '📄', 
+                        'animation': '🎞️'
+                    }.get(media_result['type'], '📎')
+                    
+                    await update.message.reply_text(
+                        f"{media_emoji} **Медиа импортировано!**\n\n"
+                        f"Тип: {media_result['type']}\n"
+                        f"✅ Будет добавлено в каталог автоматически",
+                        parse_mode='Markdown'
+                    )
                 else:
-                    await update.message.reply_text(f"{media_result.get('message', '⚠️ Добавьте медиа вручную')}")
+                    await update.message.reply_text(
+                        f"⚠️ **Медиа не импортировано**\n\n"
+                        f"{media_result.get('message', 'Не удалось получить доступ к посту')}\n\n"
+                        f"💡 Вы сможете добавить медиа вручную на следующем шаге",
+                        parse_mode='Markdown'
+                    )
                 
-                data['step'] = 'description'
-                await update.message.reply_text(
-                    "📝 Шаг 2/3\n\n"
-                    "Описание (до 255 символов):"
-                )
-            else:
-                await update.message.reply_text("❌ Ссылка должна начинаться с https://t.me/")
-        
-        elif step == 'description':
-            data['name'] = text[:255]
-            data['step'] = 'tags'
-            await update.message.reply_text(
-                "🏷️ Шаг 3/3\n\n"
-                "Теги через запятую (до 10):"
-            )
-        
-        elif step == 'tags':
-            tags = [t.strip() for t in text.split(',') if t.strip()][:10]
-            data['tags'] = tags
-            
-            # Сохраняем пост
-            category = data['category']
-            post_id = await catalog_service.add_post(
-                user_id=user_id,
-                catalog_link=data['catalog_link'],
-                category=category,
-                name=data['name'],
-                tags=tags,
-                media_type=data.get('media_type'),
-                media_file_id=data.get('media_file_id'),
-                media_group_id=data.get('media_group_id'),
-                media_json=data.get('media_json', [])
-            )
-            
-            if post_id:
-                post = await catalog_service.get_post_by_id(post_id)
-                catalog_number = post.get('catalog_number', '????')
-                
-                await update.message.reply_text(
-                    f"✅ Пост #{catalog_number} добавлен в {category}!\n\n"
-                    f"📝 {data['name']}\n"
-                    f"🏷️ {len(tags)} тегов\n"
-                    f"📸 Медиа: {'Да' if data.get('media_file_id') else 'Нет'}"
-                )
-                
-                # Уведомляем подписчиков
-                await notify_subscribers_about_new_post(context.bot, post_id, category)
-            else:
-                await update.message.reply_text("❌ Ошибка при добавлении поста")
-            
-            context.user_data.pop('catalog_add_top', None)
-        
-        return
-    
-    # Обработка отзыва (ТЕКСТ ПОСЛЕ ВЫБОРА ЗВЕЗД)
-    if 'catalog_review' in context.user_data and context.user_data['catalog_review'].get('step') == 'text':
-        post_id = context.user_data['catalog_review'].get('post_id')
-        rating = context.user_data['catalog_review'].get('rating', 5)
-        
-        # Передаем бота для уведомлений
-        review_id = await catalog_service.add_review(
-            post_id=post_id,
-            user_id=user_id,
-            review_text=text[:500],
-            rating=rating,
-            username=update.effective_user.username,
-            bot=context.bot
-        )
-        
-        if review_id:
-    stars = "⭐" * rating
-    await update.message.reply_text(
-        f"✅ Отзыв добавлен!\n\n"
-        f"Оценка: {stars}\n\n"
-        f"/catalog - продолжить просмотр"
-    )
-else:
-    await update.message.reply_text("❌ Ошибка при добавлении отзыва")
-
-context.user_data.pop('catalog_review', None)
-return
-
-# Добавление поста
-if 'catalog_add' in context.user_data:
-    data = context.user_data['catalog_add']
-    step = data.get('step')
-
-    if step == 'link':
-        if text.startswith('https://t.me/'):
-            data['catalog_link'] = text
-
-            # ВАЖНО: Импортируем медиа
-            media_result = await extract_media_from_link(context.bot, text)
-
-            if media_result and media_result.get('success'):
-                data['media_type'] = media_result['type']
-                data['media_file_id'] = media_result['file_id']
-                # ...
-                await update.message.reply_text(f"✅ {media_result['message']}")
-            else:
-                await update.message.reply_text("⚠️ Медиа не импортировано")
-
-            data['step'] = 'category'
-                
-                # Пытаемся извлечь медиа
-                media_result = await extract_media_from_link(context.bot, text)
-                if media_result and media_result.get('success'):
-                    data['media_type'] = media_result['type']
-                    data['media_file_id'] = media_result['file_id']
-                    data['media_group_id'] = media_result.get('media_group_id')
-                    data['media_json'] = media_result.get('media_json', [])
-                    await update.message.reply_text(f"{media_result['message']}")
-                else:
-                    await update.message.reply_text(f"{media_result.get('message', '⚠️ Добавьте медиа вручную')}")
+                data['step'] = 'category'
                 
                 keyboard = [[InlineKeyboardButton(cat, callback_data=f"catalog:add_cat:{cat}")] for cat in CATALOG_CATEGORIES.keys()]
                 await update.message.reply_text(
@@ -1511,11 +1416,41 @@ if 'catalog_add' in context.user_data:
         
         elif step == 'name':
             data['name'] = text[:255]
-            data['step'] = 'media'
+            
+            # ✅ ПРОВЕРЯЕМ - ЕСЛИ МЕДИА УЖЕ ИМПОРТИРОВАНО, ПРОПУСКАЕМ ШАГ
+            if data.get('media_file_id'):
+                data['step'] = 'tags'
+                media_emoji = {
+                    'photo': '📸', 
+                    'video': '🎬', 
+                    'document': '📄', 
+                    'animation': '🎞️'
+                }.get(data.get('media_type'), '📎')
+                
+                await update.message.reply_text(
+                    f"✅ Название: {text[:50]}\n"
+                    f"{media_emoji} Медиа импортировано из оригинального поста\n\n"
+                    f"#️⃣ Шаг 4/4\n\n"
+                    f"Теги через запятую (до 10):\n"
+                    f"Пример: маникюр, гель-лак"
+                )
+            else:
+                data['step'] = 'media'
+                await update.message.reply_text(
+                    "📸 Шаг 4/5\n\n"
+                    "Отправьте фото/видео или нажмите /skip если медиа не нужно"
+                )
+        
+        # ✅ КОМАНДА ДЛЯ ПРОПУСКА МЕДИА
+        elif text == '/skip' and step == 'media':
+            data['step'] = 'tags'
             await update.message.reply_text(
-                "📸 Шаг 4/5\n\n"
-                "Отправьте фото/видео или нажмите /skip если медиа уже загружено"
+                "⏩ Медиа пропущено\n\n"
+                "#️⃣ Шаг 4/4\n\n"
+                "Теги через запятую (до 10):\n"
+                "Пример: маникюр, гель-лак"
             )
+            return
         
         elif step == 'tags':
             tags = [t.strip() for t in text.split(',') if t.strip()][:10]
@@ -1535,16 +1470,18 @@ if 'catalog_add' in context.user_data:
             )
             
             if post_id:
-                # Получаем номер поста
                 post = await catalog_service.get_post_by_id(post_id)
                 catalog_number = post.get('catalog_number', '????')
+                
+                has_media = "Да" if data.get('media_file_id') else "Нет"
+                media_info = f" ({data.get('media_type')})" if data.get('media_type') else ""
                 
                 await update.message.reply_text(
                     f"✅ Пост #{catalog_number} добавлен в каталог!\n\n"
                     f"📂 {data['category']}\n"
                     f"📝 {data['name']}\n"
                     f"🏷️ {len(tags)} тегов\n"
-                    f"📸 Медиа: {'Да' if data.get('media_file_id') else 'Нет'}"
+                    f"📸 Медиа: {has_media}{media_info}"
                 )
                 
                 # Уведомляем подписчиков
