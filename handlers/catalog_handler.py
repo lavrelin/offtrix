@@ -1456,39 +1456,39 @@ async def handle_catalog_text(update: Update, context: ContextTypes.DEFAULT_TYPE
         )
         
         if review_id:
-            stars = "⭐" * rating
-            await update.message.reply_text(
-                f"✅ Отзыв добавлен!\n\n"
-                f"Оценка: {stars}\n\n"
-                f"/catalog - продолжить просмотр"
-            )
-        else:
-            await update.message.reply_text("❌ Ошибка при добавлении отзыва")
-        
-        context.user_data.pop('catalog_review', None)
-        return
-    
-    # Добавление поста
-    if 'catalog_add' in context.user_data:
-        data = context.user_data['catalog_add']
-        step = data.get('step')
-        
-        if step == 'link':
-    if text.startswith('https://t.me/'):
-        data['catalog_link'] = text
-        
-        # ВАЖНО: Импортируем медиа
-        media_result = await extract_media_from_link(context.bot, text)
-        
-        if media_result and media_result.get('success'):
-            data['media_type'] = media_result['type']
-            data['media_file_id'] = media_result['file_id']
-            # ...
-            await update.message.reply_text(f"✅ {media_result['message']}")
-        else:
-            await update.message.reply_text("⚠️ Медиа не импортировано")
-        
-        data['step'] = 'category'
+    stars = "⭐" * rating
+    await update.message.reply_text(
+        f"✅ Отзыв добавлен!\n\n"
+        f"Оценка: {stars}\n\n"
+        f"/catalog - продолжить просмотр"
+    )
+else:
+    await update.message.reply_text("❌ Ошибка при добавлении отзыва")
+
+context.user_data.pop('catalog_review', None)
+return
+
+# Добавление поста
+if 'catalog_add' in context.user_data:
+    data = context.user_data['catalog_add']
+    step = data.get('step')
+
+    if step == 'link':
+        if text.startswith('https://t.me/'):
+            data['catalog_link'] = text
+
+            # ВАЖНО: Импортируем медиа
+            media_result = await extract_media_from_link(context.bot, text)
+
+            if media_result and media_result.get('success'):
+                data['media_type'] = media_result['type']
+                data['media_file_id'] = media_result['file_id']
+                # ...
+                await update.message.reply_text(f"✅ {media_result['message']}")
+            else:
+                await update.message.reply_text("⚠️ Медиа не импортировано")
+
+            data['step'] = 'category'
                 
                 # Пытаемся извлечь медиа
                 media_result = await extract_media_from_link(context.bot, text)
