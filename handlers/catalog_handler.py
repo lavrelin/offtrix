@@ -887,42 +887,123 @@ async def favorites_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ============= CALLBACKS =============
 
 async def handle_catalog_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Обработчик callback - РАСШИРЕННАЯ ВЕРСИЯ"""
+    """Обработчик callback - ПОЛНАЯ ВЕРСИЯ"""
     query = update.callback_query
     await query.answer()
     data = query.data.split(":")
     action = data[1] if len(data) > 1 else None
     user_id = update.effective_user.id
     
-    # [ПРЕДЫДУЩИЕ CALLBACKS ОСТАЮТСЯ БЕЗ ИЗМЕНЕНИЙ]
-    # ... (код из оригинала) ...
+    # ============= БАЗОВЫЕ CALLBACKS =============
+    
+    if action == "next":
+        posts = await catalog_service.get_random_posts(user_id, count=5)
+        if not posts:
+            keyboard = [
+                [InlineKeyboardButton("🔄 Начать заново", callback_data="catalog:restart")],
+                [InlineKeyboardButton("↩️ Главное меню", callback_data="menu:back")]
+            ]
+            await query.edit_message_text(
+                "📂 Все посты просмотрены!\n\nНажмите 🔄 для сброса",
+                reply_markup=InlineKeyboardMarkup(keyboard)
+            )
+        else:
+            for i, post in enumerate(posts, 1):
+                await send_catalog_post_with_media(context.bot, query.message.chat_id, post, i, len(posts))
+            await query.message.delete()
+    
+    elif action == "finish":
+        await query.edit_message_text(
+            "✅ Просмотр завершён!\n\n"
+            "/catalog - начать заново\n"
+            "/search - поиск\n"
+            "/mysubscriptions - подписки\n"
+            "/favorites - избранное"
+        )
+    
+    elif action == "restart":
+        await catalog_service.reset_session(user_id)
+        await query.edit_message_text("🔄 Сессия сброшена!\n\nИспользуйте /catalog")
+    
+    elif action == "search":
+        keyboard = [[InlineKeyboardButton(cat, callback_data=f"catalog:cat:{cat}")] for cat in CATALOG_CATEGORIES.keys()]
+        keyboard.append([InlineKeyboardButton("⬅️ Назад", callback_data="catalog:finish")])
+        await query.edit_message_text(
+            "🔍 Выберите категорию:",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+    
+    elif action == "cat":
+        category = ":".join(data[2:])
+        posts = await catalog_service.search_posts(category, limit=5)
+        if posts:
+            for i, post in enumerate(posts, 1):
+                await send_catalog_post_with_media(context.bot, query.message.chat_id, post, i, len(posts))
+            keyboard = [[InlineKeyboardButton("✅ Готово", callback_data="catalog:finish")]]
+            await query.edit_message_text(
+                f"📂 Найдено: {len(posts)}",
+                reply_markup=InlineKeyboardMarkup(keyboard)
+            )
+        else:
+            await query.edit_message_text(f"❌ В категории '{category}' пока нет постов")
+    
+    elif action == "subscribe":
+        category = ":".join(data[2:])
+        success = await catalog_service.subscribe_to_category(user_id, category)
+        await query.answer("🔔 Подписка оформлена!" if success else "❌ Ошибка", show_alert=True)
+    
+    elif action == "review":
+        post_id = int(data[2]) if len(data) > 2 else None
+        if post_id:
+            context.user_data['catalog_review'] = {'post_id': post_id, 'waiting': True}
+            keyboard = [[InlineKeyboardButton("❌ Отмена", callback_data="catalog:cancel_review")]]
+            await query.message.reply_text(
+                f"💬 Введите отзыв о посте #{post_id}:",
+                reply_markup=InlineKeyboardMarkup(keyboard)
+            )
+    
+    elif action == "cancel_review":
+        context.user_data.pop('catalog_review', None)
+        await query.edit_message_text("❌ Отзыв отменён")
+    
+    elif action == "cancel":
+        context.user_data.pop('catalog_add', None)
+        await query.edit_message_text("❌ Добавление отменено")
+    
+    elif action == "cancel_ad":
+        context.user_data.pop('catalog_ad', None)
+        await query.edit_message_text("❌ Добавление рекламы отменено")
+    
+    elif action == "priority_finish":
+        links = context.user_data.get('catalog_priority', {}).get('links', [])
+        if links:
+            count = await catalog_service.set_priority_posts(links)
+            await query.edit_message_text(f"✅ Установлено {count} приоритетных постов")
+        else:
+            await query.edit_message_text("❌ Ссылки не добавлены")
+        context.user_data.pop('catalog_priority', None)
     
     # ============= НОВЫЕ CALLBACKS v2.0 =============
     
-    if action == "favorite":
+    elif action == "favorite":
         post_id = int(data[2]) if len(data) > 2 else None
         if post_id:
             success = await catalog_service.toggle_favorite(user_id, post_id)
             await query.answer(
-                "⭐ Добавлено в избранное!" if success else "❌ Ошибка",
+                "⭐ Добавлено в избранное!" if success else "❌ Убрано из избранного",
                 show_alert=True
             )
     
     elif action == "unsub":
         category = ":".join(data[2:])
         success = await catalog_service.unsubscribe_from_category(user_id, category)
-        await query.answer(
-            "✅ Отписались" if success else "❌ Ошибка",
-            show_alert=True
-        )
-        # Обновляем список подписок
+        await query.answer("✅ Отписались" if success else "❌ Ошибка", show_alert=True)
         await mysubscriptions_command(update, context)
     
     elif action == "unsub_all":
         count = await catalog_service.unsubscribe_from_all(user_id)
         await query.edit_message_text(
-            f"✅ Отписались от всех категорий ({count})\n\n"
-            "/mysubscriptions - посмотреть подписки"
+            f"✅ Отписались от всех категорий ({count})\n\n/mysubscriptions"
         )
     
     elif action == "remove_confirm":
@@ -930,9 +1011,7 @@ async def handle_catalog_callback(update: Update, context: ContextTypes.DEFAULT_
         if post_id:
             success = await catalog_service.delete_post(post_id, user_id)
             await query.edit_message_text(
-                f"🗑️ Пост #{post_id} удалён из каталога\n"
-                "📊 Статистика сохранена в архиве"
-                if success else "❌ Ошибка при удалении"
+                f"🗑️ Пост #{post_id} удалён" if success else "❌ Ошибка"
             )
     
     elif action == "remove_cancel":
@@ -943,7 +1022,7 @@ async def handle_catalog_callback(update: Update, context: ContextTypes.DEFAULT_
         post_id = context.user_data.get('catalog_edit', {}).get('post_id')
         
         if not post_id:
-            await query.answer("Ошибка: пост не найден", show_alert=True)
+            await query.answer("❌ Пост не найден", show_alert=True)
             return
         
         context.user_data['catalog_edit']['field'] = field
@@ -954,10 +1033,14 @@ async def handle_catalog_callback(update: Update, context: ContextTypes.DEFAULT_
             'name': "Введите новое название:",
             'tags': "Введите новые теги через запятую:",
             'link': "Введите новую ссылку:",
-            'media': "Отправьте новое медиа или ссылку на пост:"
+            'media': "Отправьте новое медиа:"
         }
         
         await query.edit_message_text(prompts.get(field, "Введите новое значение:"))
+    
+    elif action == "edit_cancel":
+        context.user_data.pop('catalog_edit', None)
+        await query.edit_message_text("❌ Редактирование отменено")
     
     elif action == "bulk_finish":
         links = context.user_data.get('catalog_bulk', {}).get('links', [])
@@ -966,23 +1049,16 @@ async def handle_catalog_callback(update: Update, context: ContextTypes.DEFAULT_
             await query.edit_message_text("❌ Ссылки не добавлены")
             return
         
-        await query.edit_message_text(
-            f"⏳ Начинаю импорт {len(links)} постов...\n"
-            "Это может занять несколько минут"
-        )
+        await query.edit_message_text(f"⏳ Импорт {len(links)} постов...")
         
         results = await catalog_service.bulk_import(links, user_id)
-        
-        success_count = results.get('success', 0)
-        failed_count = results.get('failed', 0)
         
         await context.bot.send_message(
             chat_id=query.message.chat_id,
             text=(
-                f"✅ **МАССОВЫЙ ИМПОРТ ЗАВЕРШЕН**\n\n"
-                f"Успешно: {success_count}\n"
-                f"Ошибки: {failed_count}\n\n"
-                f"Всего обработано: {len(links)}"
+                f"✅ **ИМПОРТ ЗАВЕРШЕН**\n\n"
+                f"Успешно: {results['success']}\n"
+                f"Ошибки: {results['failed']}"
             ),
             parse_mode='Markdown'
         )
@@ -993,7 +1069,6 @@ async def handle_catalog_callback(update: Update, context: ContextTypes.DEFAULT_
         await foryou_command(update, context)
     
     elif action == "favorites_sort":
-        # Сортировка избранного по категориям
         categories = await catalog_service.get_user_favorite_categories(user_id)
         keyboard = [
             [InlineKeyboardButton(cat, callback_data=f"catalog:fav_cat:{cat}")]
@@ -1009,9 +1084,7 @@ async def handle_catalog_callback(update: Update, context: ContextTypes.DEFAULT_
     elif action == "favorites_share":
         share_link = await catalog_service.generate_favorites_share_link(user_id)
         await query.edit_message_text(
-            f"📤 **Поделиться избранным**\n\n"
-            f"Ваша ссылка:\n{share_link}\n\n"
-            "Отправьте её друзьям!"
+            f"📤 **Поделиться избранным**\n\n{share_link}\n\nОтправьте друзьям!"
         )
     
     elif action == "favorites_clear":
@@ -1022,18 +1095,16 @@ async def handle_catalog_callback(update: Update, context: ContextTypes.DEFAULT_
             ]
         ]
         await query.edit_message_text(
-            "⚠️ Вы уверены что хотите очистить избранное?",
+            "⚠️ Удалить всё избранное?",
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
     
     elif action == "fav_clear_confirm":
         count = await catalog_service.clear_favorites(user_id)
-        await query.edit_message_text(
-            f"🗑️ Избранное очищено ({count} услуг)\n\n"
-            "/favorites - посмотреть избранное"
-        )
-
-
+        await query.edit_message_text(f"🗑️ Избранное очищено ({count})\n\n/favorites")
+    
+    elif action == "favorites_back":
+        await favorites_command(update, context)
 # ============= TEXT HANDLER =============
 
 async def handle_catalog_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
