@@ -54,21 +54,38 @@ from .autopost_handler import (
 )
 
 # ============= КАТАЛОГ - ОБНОВЛЕННАЯ ВЕРСИЯ =============
+# ============= КАТАЛОГ - ОБНОВЛЕННАЯ ВЕРСИЯ 2.0 =============
 from .catalog_handler import (
+    # Существующие команды
     catalog_command,
     search_command,
     addtocatalog_command,
     review_command,
     catalogpriority_command,
     addcatalogreklama_command,
-    catalogviews_command,              # ← НОВАЯ КОМАНДА
+    catalogviews_command,
     catalog_stats_users_command,
     catalog_stats_categories_command,
     catalog_stats_popular_command,
+    
+    # НОВЫЕ КОМАНДЫ v2.0
+    mysubscriptions_command,
+    edit_catalog_command,
+    remove_catalog_command,
+    bulkimport_command,
+    catalog_stats_new_command,
+    catalog_stats_priority_command,
+    catalog_stats_reklama_command,
+    catalog_stats_topusers_command,
+    catalog_stats_export_command,
+    foryou_command,
+    favorites_command,
+    
+    # Handlers
     handle_catalog_callback,
-    handle_catalog_text
+    handle_catalog_text,
+    handle_catalog_media
 )
-
 from .games_handler import (
     wordadd_command, 
     wordedit_command, 
