@@ -442,15 +442,15 @@ async def mysubscriptions_command(update: Update, context: ContextTypes.DEFAULT_
 
 
 async def edit_catalog_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Редактирование записи - /edit [id]"""
+    """Редактирование записи - /catalogedit [id]"""
     if not Config.is_admin(update.effective_user.id):
         await update.message.reply_text("❌ Команда только для администраторов")
         return
     
     if not context.args or not context.args[0].isdigit():
         await update.message.reply_text(
-            "🔄 Использование: `/edit [id]`\n\n"
-            "Пример: `/edit 123`",
+            "🔄 Использование: `/catalogedit [id]`\n\n"
+            "Пример: `/catalogedit 123`",
             parse_mode='Markdown'
         )
         return
