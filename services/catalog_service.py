@@ -355,7 +355,7 @@ class CatalogService:
                 conditions = []
                 for keyword in keywords:
                     conditions.append(func.lower(CatalogPost.name).contains(keyword))
-                    conditions.append(CatalogPost.tags.contains([keyword]))
+                    conditions.append(func.cast(CatalogPost.tags, String).contains(keyword)
                 
                 query_obj = select(CatalogPost).where(
                     and_(
