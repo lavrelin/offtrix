@@ -1,16 +1,17 @@
+cat > /mnt/user-data/outputs/catalog_service_FULL.py << 'ENDOFFILE'
 # -*- coding: utf-8 -*-
 """
-Сервис для работы с каталогом услуг - ИСПРАВЛЕННАЯ ВЕРСИЯ 3.1
+Сервис для работы с каталогом услуг - ПОЛНАЯ ВЕРСИЯ 4.0
 
-Изменения v3.1:
-- ✅ Добавлена генерация уникальных номеров постов (1-9999)
-- ✅ Добавлен метод get_post_by_number()
-- ✅ Добавлен метод change_catalog_number()
-- ✅ Добавлен расчет рейтинга для постов (среднее из отзывов)
-- ✅ Обновлены методы статистики для работы с catalog_number
-- ✅ Добавлены методы get_unique_viewers() и get_unique_clickers()
+Новое в v4.0:
+- ✅ Добавлены категории TopGirl и TopBoy
+- ✅ Уведомления авторам и админам о новых отзывах
+- ✅ Поля author_username и author_id для владельца карточки
+- ✅ Улучшенный импорт медиа с уведомлениями
+- ✅ Смешанная выдача каталога (4 обычных + 1 Top)
+- ✅ Импорт рейтинга из rating_handler для Top постов
 
-Версия: 3.1.0
+Версия: 4.0.0
 Дата: 24.10.2025
 """
 import logging
@@ -20,10 +21,11 @@ from datetime import datetime, timedelta
 from sqlalchemy import select, and_, or_, func, text, desc
 from services.db import db
 from models import CatalogPost, CatalogReview, CatalogSubscription, CatalogSession
+from config import Config
 
 logger = logging.getLogger(__name__)
 
-# ============= КАТЕГОРИИ КАТАЛОГА =============
+# ============= КАТЕГОРИИ КАТАЛОГА - ОБНОВЛЕНО =============
 CATALOG_CATEGORIES = {
     '💇‍♀️ Красота и уход': [
         'Барбер', 'БьютиПроцедуры', 'Волосы', 'Косметолог',
@@ -47,19 +49,22 @@ CATALOG_CATEGORIES = {
     '🎭 Досуг и впечатления': [
         'Еда', 'Фотограф', 'Экскурсии', 'Для детей', 'Ремонт',
         'Швея', 'Цветы', 'Видеограф', 'Аниматоры', 'Организация праздников'
-    ]
+    ],
+    # ============= НОВЫЕ КАТЕГОРИИ =============
+    '👱🏻‍♀️ TopGirls': [],
+    '🤵🏼‍♂️ TopBoys': []
 }
 
 
 class CatalogService:
-    """Сервис для работы с каталогом услуг - ВЕРСИЯ 3.1"""
+    """Сервис для работы с каталогом услуг - ВЕРСИЯ 4.0"""
     
     def __init__(self):
         self.max_posts_per_page = 5
         self.max_priority_posts = 10
         self.ad_frequency = 10
     
-    # ============= НОВЫЙ МЕТОД: ГЕНЕРАЦИЯ УНИКАЛЬНОГО НОМЕРА =============
+    # ============= ГЕНЕРАЦИЯ УНИКАЛЬНОГО НОМЕРА =============
     
     async def _generate_unique_catalog_number(self, session) -> int:
         """Генерировать уникальный номер для нового поста (1-9999)"""
@@ -67,7 +72,6 @@ class CatalogService:
         for _ in range(max_attempts):
             number = random.randint(1, 9999)
             
-            # Проверяем что номер свободен
             result = await session.execute(
                 select(CatalogPost.id).where(CatalogPost.catalog_number == number)
             )
@@ -77,7 +81,7 @@ class CatalogService:
         
         raise Exception("Could not generate unique catalog number after 100 attempts")
     
-    # ============= БАЗОВЫЕ МЕТОДЫ =============
+    # ============= БАЗОВЫЕ МЕТОДЫ - ОБНОВЛЕНО =============
     
     async def add_post(
         self,
@@ -91,12 +95,13 @@ class CatalogService:
         media_type: Optional[str] = None,
         media_file_id: Optional[str] = None,
         media_group_id: Optional[str] = None,
-        media_json: Optional[List[str]] = None
+        media_json: Optional[List[str]] = None,
+        author_username: Optional[str] = None,
+        author_id: Optional[int] = None
     ) -> Optional[int]:
-        """Добавить пост в каталог с медиа и уникальным номером"""
+        """Добавить пост в каталог с медиа, уникальным номером и информацией об авторе"""
         try:
             async with db.get_session() as session:
-                # ✅ НОВОЕ: Генерируем уникальный номер
                 catalog_number = await self._generate_unique_catalog_number(session)
                 
                 post = CatalogPost(
@@ -105,7 +110,9 @@ class CatalogService:
                     category=category,
                     name=name,
                     tags=tags,
-                    catalog_number=catalog_number,  # ✅ НОВОЕ
+                    catalog_number=catalog_number,
+                    author_username=author_username,
+                    author_id=author_id,
                     is_active=True,
                     clicks=0,
                     views=0,
@@ -120,15 +127,155 @@ class CatalogService:
                 await session.refresh(post)
                 
                 media_info = f"with media ({len(media_files or [])} files)" if media_files else "without media"
-                logger.info(f"Added catalog post #{catalog_number} (ID: {post.id}) by user {user_id} {media_info}")
+                logger.info(f"Added catalog post #{catalog_number} (ID: {post.id}) by user {user_id} {media_info}, author: {author_username}")
                 return post.id
                 
         except Exception as e:
             logger.error(f"Error adding catalog post: {e}")
             return None
     
+    # ============= НОВЫЙ МЕТОД: СМЕШАННАЯ ВЫДАЧА =============
+    
+    async def get_random_posts_mixed(self, user_id: int, count: int = 5) -> List[Dict]:
+        """Получить смешанные посты: 4 обычных + 1 из TopGirl/TopBoy"""
+        try:
+            async with db.get_session() as session:
+                result = await session.execute(
+                    select(CatalogSession).where(
+                        and_(
+                            CatalogSession.user_id == user_id,
+                            CatalogSession.session_active == True
+                        )
+                    )
+                )
+                user_session = result.scalar_one_or_none()
+                
+                if not user_session:
+                    user_session = CatalogSession(
+                        user_id=user_id,
+                        viewed_posts=[],
+                        session_active=True
+                    )
+                    session.add(user_session)
+                    await session.commit()
+                    await session.refresh(user_session)
+                
+                viewed_ids = user_session.viewed_posts or []
+                
+                # 1. ПОЛУЧАЕМ 4 ОБЫЧНЫХ ПОСТА
+                regular_result = await session.execute(
+                    select(CatalogPost).where(
+                        and_(
+                            CatalogPost.is_active == True,
+                            ~CatalogPost.category.in_(['👱🏻‍♀️ TopGirls', '🤵🏼‍♂️ TopBoys']),
+                            ~CatalogPost.id.in_(viewed_ids) if viewed_ids else True
+                        )
+                    ).order_by(func.random()).limit(4)
+                )
+                regular_posts = regular_result.scalars().all()
+                
+                # 2. ПОЛУЧАЕМ 1 TOP ПОСТ
+                top_category = random.choice(['👱🏻‍♀️ TopGirls', '🤵🏼‍♂️ TopBoys'])
+                
+                top_result = await session.execute(
+                    select(CatalogPost).where(
+                        and_(
+                            CatalogPost.is_active == True,
+                            CatalogPost.category == top_category,
+                            ~CatalogPost.id.in_(viewed_ids) if viewed_ids else True
+                        )
+                    ).order_by(func.random()).limit(1)
+                )
+                top_posts = top_result.scalars().all()
+                
+                if not top_posts:
+                    other_category = '🤵🏼‍♂️ TopBoys' if top_category == '👱🏻‍♀️ TopGirls' else '👱🏻‍♀️ TopGirls'
+                    top_result = await session.execute(
+                        select(CatalogPost).where(
+                            and_(
+                                CatalogPost.is_active == True,
+                                CatalogPost.category == other_category,
+                                ~CatalogPost.id.in_(viewed_ids) if viewed_ids else True
+                            )
+                        ).order_by(func.random()).limit(1)
+                    )
+                    top_posts = top_result.scalars().all()
+                
+                # 3. ОБЪЕДИНЯЕМ ПОСТЫ
+                all_posts = list(regular_posts) + list(top_posts)
+                
+                if len(all_posts) < count:
+                    needed = count - len(all_posts)
+                    extra_result = await session.execute(
+                        select(CatalogPost).where(
+                            and_(
+                                CatalogPost.is_active == True,
+                                ~CatalogPost.id.in_([p.id for p in all_posts] + viewed_ids),
+                            )
+                        ).order_by(func.random()).limit(needed)
+                    )
+                    extra_posts = extra_result.scalars().all()
+                    all_posts.extend(extra_posts)
+                
+                if not all_posts:
+                    return []
+                
+                # 4. ДОБАВЛЯЕМ РЕЙТИНГ
+                result_posts = []
+                for post in all_posts:
+                    viewed_ids.append(post.id)
+                    
+                    post_dict = self._post_to_dict(post)
+                    
+                    if post.category in ['👱🏻‍♀️ TopGirls', '🤵🏼‍♂️ TopBoys']:
+                        post_dict['rating'] = await self._get_rating_from_original_post(post.catalog_link)
+                        post_dict['review_count'] = 0
+                    else:
+                        reviews_result = await session.execute(
+                            select(
+                                func.avg(CatalogReview.rating).label('avg_rating'),
+                                func.count(CatalogReview.id).label('review_count')
+                            ).where(CatalogReview.catalog_post_id == post.id)
+                        )
+                        rating_data = reviews_result.first()
+                        
+                        post_dict['rating'] = round(rating_data.avg_rating, 1) if rating_data.avg_rating else 0
+                        post_dict['review_count'] = rating_data.review_count or 0
+                    
+                    result_posts.append(post_dict)
+                
+                random.shuffle(result_posts)
+                
+                user_session.viewed_posts = viewed_ids
+                user_session.last_activity = datetime.utcnow()
+                await session.commit()
+                
+                return result_posts
+                
+        except Exception as e:
+            logger.error(f"Error getting mixed random posts: {e}")
+            return []
+    
+    async def _get_rating_from_original_post(self, catalog_link: str) -> float:
+        """Импортировать рейтинг из оригинального поста rating_handler"""
+        try:
+            from handlers.rating_handler import rating_data
+            
+            for post_id, post_data in rating_data.get('posts', {}).items():
+                if post_data.get('profile_url') == catalog_link or catalog_link in str(post_data):
+                    votes = post_data.get('votes', {})
+                    if votes:
+                        avg_rating = sum(votes.values()) / len(votes)
+                        return max(0, min(5, (avg_rating + 2) * 1.25))
+            
+            return 0
+            
+        except Exception as e:
+            logger.error(f"Error importing rating: {e}")
+            return 0
+    
     async def get_random_posts(self, user_id: int, count: int = 5) -> List[Dict]:
-        """Получить случайные посты без повторов с рейтингом"""
+        """Получить случайные посты без повторов (старый метод для совместимости)"""
         try:
             async with db.get_session() as session:
                 result = await session.execute(
@@ -166,25 +313,26 @@ class CatalogService:
                 if not posts:
                     return []
                 
-                # ✅ НОВОЕ: Добавляем рейтинг для каждого поста
                 result_posts = []
                 for post in posts:
-                    # Добавляем ID в просмотренные
                     viewed_ids.append(post.id)
                     
                     post_dict = self._post_to_dict(post)
                     
-                    # Получаем рейтинг
-                    reviews_result = await session.execute(
-                        select(
-                            func.avg(CatalogReview.rating).label('avg_rating'),
-                            func.count(CatalogReview.id).label('review_count')
-                        ).where(CatalogReview.catalog_post_id == post.id)
-                    )
-                    rating_data = reviews_result.first()
-                    
-                    post_dict['rating'] = round(rating_data.avg_rating, 1) if rating_data.avg_rating else 0
-                    post_dict['review_count'] = rating_data.review_count or 0
+                    if post.category in ['👱🏻‍♀️ TopGirls', '🤵🏼‍♂️ TopBoys']:
+                        post_dict['rating'] = await self._get_rating_from_original_post(post.catalog_link)
+                        post_dict['review_count'] = 0
+                    else:
+                        reviews_result = await session.execute(
+                            select(
+                                func.avg(CatalogReview.rating).label('avg_rating'),
+                                func.count(CatalogReview.id).label('review_count')
+                            ).where(CatalogReview.catalog_post_id == post.id)
+                        )
+                        rating_data = reviews_result.first()
+                        
+                        post_dict['rating'] = round(rating_data.avg_rating, 1) if rating_data.avg_rating else 0
+                        post_dict['review_count'] = rating_data.review_count or 0
                     
                     result_posts.append(post_dict)
                 
@@ -199,7 +347,7 @@ class CatalogService:
             return []
     
     async def search_posts(self, query: str, limit: int = 10) -> List[Dict]:
-        """Поиск постов по ключевым словам и тегам"""
+        """Поиск постов ТОЛЬКО по ключевым словам и тегам"""
         try:
             async with db.get_session() as session:
                 keywords = query.lower().split()
@@ -219,21 +367,24 @@ class CatalogService:
                 result = await session.execute(query_obj)
                 posts = result.scalars().all()
                 
-                # Добавляем рейтинг
                 result_posts = []
                 for post in posts:
                     post_dict = self._post_to_dict(post)
                     
-                    reviews_result = await session.execute(
-                        select(
-                            func.avg(CatalogReview.rating).label('avg_rating'),
-                            func.count(CatalogReview.id).label('review_count')
-                        ).where(CatalogReview.catalog_post_id == post.id)
-                    )
-                    rating_data = reviews_result.first()
-                    
-                    post_dict['rating'] = round(rating_data.avg_rating, 1) if rating_data.avg_rating else 0
-                    post_dict['review_count'] = rating_data.review_count or 0
+                    if post.category in ['👱🏻‍♀️ TopGirls', '🤵🏼‍♂️ TopBoys']:
+                        post_dict['rating'] = await self._get_rating_from_original_post(post.catalog_link)
+                        post_dict['review_count'] = 0
+                    else:
+                        reviews_result = await session.execute(
+                            select(
+                                func.avg(CatalogReview.rating).label('avg_rating'),
+                                func.count(CatalogReview.id).label('review_count')
+                            ).where(CatalogReview.catalog_post_id == post.id)
+                        )
+                        rating_data = reviews_result.first()
+                        
+                        post_dict['rating'] = round(rating_data.avg_rating, 1) if rating_data.avg_rating else 0
+                        post_dict['review_count'] = rating_data.review_count or 0
                     
                     result_posts.append(post_dict)
                 
@@ -257,25 +408,26 @@ class CatalogService:
                 
                 post_dict = self._post_to_dict(post)
                 
-                # Получаем рейтинг
-                reviews_result = await session.execute(
-                    select(
-                        func.avg(CatalogReview.rating).label('avg_rating'),
-                        func.count(CatalogReview.id).label('review_count')
-                    ).where(CatalogReview.catalog_post_id == post.id)
-                )
-                rating_data = reviews_result.first()
-                
-                post_dict['rating'] = round(rating_data.avg_rating, 1) if rating_data.avg_rating else 0
-                post_dict['review_count'] = rating_data.review_count or 0
+                if post.category in ['👱🏻‍♀️ TopGirls', '🤵🏼‍♂️ TopBoys']:
+                    post_dict['rating'] = await self._get_rating_from_original_post(post.catalog_link)
+                    post_dict['review_count'] = 0
+                else:
+                    reviews_result = await session.execute(
+                        select(
+                            func.avg(CatalogReview.rating).label('avg_rating'),
+                            func.count(CatalogReview.id).label('review_count')
+                        ).where(CatalogReview.catalog_post_id == post.id)
+                    )
+                    rating_data = reviews_result.first()
+                    
+                    post_dict['rating'] = round(rating_data.avg_rating, 1) if rating_data.avg_rating else 0
+                    post_dict['review_count'] = rating_data.review_count or 0
                 
                 return post_dict
                 
         except Exception as e:
             logger.error(f"Error getting post {post_id}: {e}")
             return None
-    
-    # ============= НОВЫЙ МЕТОД: ПОЛУЧЕНИЕ ПОСТА ПО НОМЕРУ =============
     
     async def get_post_by_number(self, catalog_number: int) -> Optional[Dict]:
         """Получить пост по уникальному номеру"""
@@ -291,17 +443,20 @@ class CatalogService:
                 
                 post_dict = self._post_to_dict(post)
                 
-                # Получаем средний рейтинг и количество отзывов
-                reviews_result = await session.execute(
-                    select(
-                        func.avg(CatalogReview.rating).label('avg_rating'),
-                        func.count(CatalogReview.id).label('review_count')
-                    ).where(CatalogReview.catalog_post_id == post.id)
-                )
-                rating_data = reviews_result.first()
-                
-                post_dict['rating'] = round(rating_data.avg_rating, 1) if rating_data.avg_rating else 0
-                post_dict['review_count'] = rating_data.review_count or 0
+                if post.category in ['👱🏻‍♀️ TopGirls', '🤵🏼‍♂️ TopBoys']:
+                    post_dict['rating'] = await self._get_rating_from_original_post(post.catalog_link)
+                    post_dict['review_count'] = 0
+                else:
+                    reviews_result = await session.execute(
+                        select(
+                            func.avg(CatalogReview.rating).label('avg_rating'),
+                            func.count(CatalogReview.id).label('review_count')
+                        ).where(CatalogReview.catalog_post_id == post.id)
+                    )
+                    rating_data = reviews_result.first()
+                    
+                    post_dict['rating'] = round(rating_data.avg_rating, 1) if rating_data.avg_rating else 0
+                    post_dict['review_count'] = rating_data.review_count or 0
                 
                 return post_dict
                 
@@ -309,13 +464,10 @@ class CatalogService:
             logger.error(f"Error getting post by number {catalog_number}: {e}")
             return None
     
-    # ============= НОВЫЙ МЕТОД: ИЗМЕНЕНИЕ НОМЕРА ПОСТА =============
-    
     async def change_catalog_number(self, old_number: int, new_number: int) -> bool:
         """Изменить номер поста"""
         try:
             async with db.get_session() as session:
-                # Проверяем что новый номер свободен
                 check_result = await session.execute(
                     select(CatalogPost.id).where(CatalogPost.catalog_number == new_number)
                 )
@@ -323,7 +475,6 @@ class CatalogService:
                     logger.warning(f"Catalog number {new_number} already taken")
                     return False
                 
-                # Находим пост со старым номером
                 result = await session.execute(
                     select(CatalogPost).where(CatalogPost.catalog_number == old_number)
                 )
@@ -333,7 +484,6 @@ class CatalogService:
                     logger.warning(f"Post with number {old_number} not found")
                     return False
                 
-                # Меняем номер
                 post.catalog_number = new_number
                 post.updated_at = datetime.utcnow()
                 await session.commit()
@@ -395,7 +545,99 @@ class CatalogService:
         except Exception as e:
             logger.error(f"Error resetting session: {e}")
     
-    # ============= ОТЗЫВЫ =============
+    # ============= НОВЫЙ МЕТОД: УВЕДОМЛЕНИЯ О НОВЫХ ОТЗЫВАХ =============
+    
+    async def notify_new_review(
+        self,
+        bot,
+        post_id: int,
+        reviewer_user_id: int,
+        reviewer_username: str,
+        rating: int,
+        review_text: str
+    ):
+        """Уведомить автора и админов о новом отзыве"""
+        try:
+            async with db.get_session() as session:
+                result = await session.execute(
+                    select(CatalogPost).where(CatalogPost.id == post_id)
+                )
+                post = result.scalar_one_or_none()
+                
+                if not post:
+                    logger.warning(f"Post {post_id} not found for notification")
+                    return
+                
+                stars = "⭐" * rating
+                catalog_number = post.catalog_number or '????'
+                
+                # 1. ПРОБУЕМ УВЕДОМИТЬ АВТОРА
+                author_notified = False
+                
+                if post.author_id:
+                    try:
+                        author_message = (
+                            f"💬 **Новый отзыв на вашу карточку!**\n\n"
+                            f"#️⃣ Пост #{catalog_number}\n"
+                            f"📂 Категория: {post.category}\n"
+                            f"🧾 Название: {post.name}\n"
+                            f"👤 От: @{reviewer_username}\n"
+                            f"⭐ Оценка: {stars} {rating}/5\n"
+                            f"📝 \"{review_text[:200]}\"\n\n"
+                            f"🔗 Посмотреть: {post.catalog_link}"
+                        )
+                        
+                        await bot.send_message(
+                            chat_id=post.author_id,
+                            text=author_message,
+                            parse_mode='Markdown'
+                        )
+                        
+                        author_notified = True
+                        logger.info(f"Author {post.author_id} notified about new review")
+                        
+                    except Exception as e:
+                        logger.warning(f"Could not notify author {post.author_id}: {e}")
+                        author_notified = False
+                
+                # 2. УВЕДОМЛЯЕМ АДМИНОВ
+                admin_message = (
+                    f"💬 **Новый отзыв получен**\n\n"
+                    f"📂 Категория: {post.category}\n"
+                    f"🧾 Название: {post.name}\n"
+                    f"👤 От: @{reviewer_username}\n"
+                    f"⭐ Оценка: {stars} {rating}/5\n"
+                    f"📝 \"{review_text[:200]}\"\n\n"
+                )
+                
+                if author_notified:
+                    admin_message += "✅ Автор уведомлён\n"
+                else:
+                    admin_message += "❌ Автор не уведомлён\n"
+                    if post.author_username:
+                        admin_message += f"   (автор: {post.author_username}, не запустил бота)\n"
+                
+                try:
+                    chat_info = await bot.get_chat(Config.ADMIN_GROUP_ID)
+                    admin_message += f"\n💬 ID чата: {Config.ADMIN_GROUP_ID}\n"
+                    admin_message += f"🏷️ Название: {chat_info.title}\n"
+                except:
+                    admin_message += f"\n💬 ID чата: {Config.ADMIN_GROUP_ID}\n"
+                
+                try:
+                    await bot.send_message(
+                        chat_id=Config.ADMIN_GROUP_ID,
+                        text=admin_message,
+                        parse_mode='Markdown'
+                    )
+                    logger.info(f"Admins notified about new review on post {post_id}")
+                except Exception as e:
+                    logger.error(f"Could not notify admins: {e}")
+                
+        except Exception as e:
+            logger.error(f"Error in notify_new_review: {e}")
+    
+    # ============= ОТЗЫВЫ - ОБНОВЛЕНО =============
     
     async def add_review(
         self,
@@ -403,9 +645,10 @@ class CatalogService:
         user_id: int,
         review_text: str,
         rating: int = 5,
-        username: Optional[str] = None
+        username: Optional[str] = None,
+        bot = None
     ) -> Optional[int]:
-        """Добавить отзыв о посте"""
+        """Добавить отзыв о посте с уведомлениями"""
         try:
             async with db.get_session() as session:
                 post_result = await session.execute(
@@ -430,6 +673,18 @@ class CatalogService:
                 await session.refresh(review)
                 
                 logger.info(f"Added review {review.id} for post {post_id} by user {user_id} (rating: {rating})")
+                
+                # ОТПРАВЛЯЕМ УВЕДОМЛЕНИЯ
+                if bot:
+                    await self.notify_new_review(
+                        bot=bot,
+                        post_id=post_id,
+                        reviewer_user_id=user_id,
+                        reviewer_username=username or f"ID_{user_id}",
+                        rating=rating,
+                        review_text=review_text
+                    )
+                
                 return review.id
                 
         except Exception as e:
@@ -609,7 +864,6 @@ class CatalogService:
                     logger.warning(f"Post {post_id} not found for update")
                     return False
                 
-                # Если меняем catalog_number, проверяем уникальность
                 if field == 'catalog_number':
                     check_result = await session.execute(
                         select(CatalogPost.id).where(CatalogPost.catalog_number == value)
@@ -690,7 +944,7 @@ class CatalogService:
     # ============= СТАТИСТИКА =============
     
     async def get_views_stats(self, limit: int = 20) -> List[tuple]:
-        """Получить статистику просмотров - ТОП постов"""
+        """Получить статистику просмотров"""
         try:
             async with db.get_session() as session:
                 result = await session.execute(
@@ -698,7 +952,7 @@ class CatalogService:
                         CatalogPost.id,
                         CatalogPost.views,
                         CatalogPost.name,
-                        CatalogPost.catalog_number  # ✅ ДОБАВЛЕНО
+                        CatalogPost.catalog_number
                     ).where(CatalogPost.is_active == True)
                     .order_by(CatalogPost.views.desc())
                     .limit(limit)
@@ -736,96 +990,56 @@ class CatalogService:
             logger.error(f"Error getting category stats: {e}")
             return {}
     
-    async def get_priority_stats(self) -> Dict:
-        """Статистика по приоритетным постам"""
+    async def get_unique_viewers(self) -> int:
+        """Количество уникальных пользователей с просмотрами"""
         try:
             async with db.get_session() as session:
                 result = await session.execute(
-                    select(CatalogPost).where(
-                        and_(
-                            CatalogPost.is_priority == True,
-                            CatalogPost.is_active == True
-                        )
-                    ).order_by(CatalogPost.views.desc())
-                )
-                priority_posts = result.scalars().all()
-                
-                priority_views = sum(p.views for p in priority_posts)
-                priority_clicks = sum(p.clicks for p in priority_posts)
-                priority_ctr = (priority_clicks / priority_views * 100) if priority_views > 0 else 0
-                
-                result = await session.execute(
-                    select(CatalogPost).where(
-                        and_(
-                            CatalogPost.is_priority == False,
-                            CatalogPost.is_active == True
-                        )
+                    select(func.count(func.distinct(CatalogSession.user_id))).where(
+                        func.json_array_length(CatalogSession.viewed_posts) > 0
                     )
                 )
-                normal_posts = result.scalars().all()
-                normal_views = sum(p.views for p in normal_posts)
-                normal_clicks = sum(p.clicks for p in normal_posts)
-                normal_ctr = (normal_clicks / normal_views * 100) if normal_views > 0 else 0
-                
-                improvement = ((priority_ctr - normal_ctr) / normal_ctr * 100) if normal_ctr > 0 else 0
-                
-                return {
-                    'posts': [
-                        {
-                            'id': p.id,
-                            'catalog_number': p.catalog_number,  # ✅ ДОБАВЛЕНО
-                            'name': p.name,
-                            'views': p.views,
-                            'clicks': p.clicks
-                        }
-                        for p in priority_posts
-                    ],
-                    'avg_ctr': priority_ctr,
-                    'normal_ctr': normal_ctr,
-                    'improvement': improvement
-                }
-                
+                return result.scalar() or 0
         except Exception as e:
-            logger.error(f"Error getting priority stats: {e}")
-            return {'posts': [], 'avg_ctr': 0, 'normal_ctr': 0, 'improvement': 0}
+            logger.error(f"Error getting unique viewers: {e}")
+            return 0
     
-    async def get_ad_stats(self) -> Dict:
-        """Статистика по рекламным постам"""
+    async def get_unique_clickers(self) -> int:
+        """Количество уникальных пользователей с переходами"""
         try:
             async with db.get_session() as session:
                 result = await session.execute(
-                    select(CatalogPost).where(
-                        and_(
-                            CatalogPost.is_ad == True,
-                            CatalogPost.is_active == True
-                        )
+                    select(func.count(func.distinct(CatalogPost.user_id))).where(
+                        CatalogPost.clicks > 0
                     )
                 )
-                ads = result.scalars().all()
+                return result.scalar() or 0
+        except Exception as e:
+            logger.error(f"Error getting unique clickers: {e}")
+            return 0
+    
+    async def get_top_posts_with_clicks(self, limit: int = 20) -> List[tuple]:
+        """ТОП постов с просмотрами и переходами"""
+        try:
+            async with db.get_session() as session:
+                result = await session.execute(
+                    select(
+                        CatalogPost.id,
+                        CatalogPost.views,
+                        CatalogPost.clicks,
+                        CatalogPost.name,
+                        CatalogPost.catalog_number
+                    ).where(CatalogPost.is_active == True)
+                    .order_by(CatalogPost.views.desc())
+                    .limit(limit)
+                )
                 
-                total_views = sum(ad.views for ad in ads)
-                total_clicks = sum(ad.clicks for ad in ads)
-                avg_ctr = (total_clicks / total_views * 100) if total_views > 0 else 0
-                
-                return {
-                    'ads': [
-                        {
-                            'id': ad.id,
-                            'catalog_number': ad.catalog_number,  # ✅ ДОБАВЛЕНО
-                            'name': ad.name,
-                            'views': ad.views,
-                            'clicks': ad.clicks
-                        }
-                        for ad in ads
-                    ],
-                    'total_views': total_views,
-                    'total_clicks': total_clicks,
-                    'avg_ctr': avg_ctr
-                }
+                stats = result.all()
+                return stats
                 
         except Exception as e:
-            logger.error(f"Error getting ad stats: {e}")
-            return {'ads': [], 'total_views': 0, 'total_clicks': 0, 'avg_ctr': 0}
+            logger.error(f"Error getting top posts: {e}")
+            return []
     
     async def get_catalog_stats(self) -> Dict:
         """Получить полную статистику каталога"""
@@ -892,59 +1106,96 @@ class CatalogService:
                 'total_reviews': 0
             }
     
-    # ============= НОВЫЕ МЕТОДЫ v3.1 =============
-    
-    async def get_unique_viewers(self) -> int:
-        """Количество уникальных пользователей с просмотрами"""
+    async def get_priority_stats(self) -> Dict:
+        """Статистика по приоритетным постам"""
         try:
             async with db.get_session() as session:
                 result = await session.execute(
-                    select(func.count(func.distinct(CatalogSession.user_id))).where(
-                        func.json_array_length(CatalogSession.viewed_posts) > 0
+                    select(CatalogPost).where(
+                        and_(
+                            CatalogPost.is_priority == True,
+                            CatalogPost.is_active == True
+                        )
+                    ).order_by(CatalogPost.views.desc())
+                )
+                priority_posts = result.scalars().all()
+                
+                priority_views = sum(p.views for p in priority_posts)
+                priority_clicks = sum(p.clicks for p in priority_posts)
+                priority_ctr = (priority_clicks / priority_views * 100) if priority_views > 0 else 0
+                
+                result = await session.execute(
+                    select(CatalogPost).where(
+                        and_(
+                            CatalogPost.is_priority == False,
+                            CatalogPost.is_active == True
+                        )
                     )
                 )
-                return result.scalar() or 0
+                normal_posts = result.scalars().all()
+                normal_views = sum(p.views for p in normal_posts)
+                normal_clicks = sum(p.clicks for p in normal_posts)
+                normal_ctr = (normal_clicks / normal_views * 100) if normal_views > 0 else 0
+                
+                improvement = ((priority_ctr - normal_ctr) / normal_ctr * 100) if normal_ctr > 0 else 0
+                
+                return {
+                    'posts': [
+                        {
+                            'id': p.id,
+                            'catalog_number': p.catalog_number,
+                            'name': p.name,
+                            'views': p.views,
+                            'clicks': p.clicks
+                        }
+                        for p in priority_posts
+                    ],
+                    'avg_ctr': priority_ctr,
+                    'normal_ctr': normal_ctr,
+                    'improvement': improvement
+                }
+                
         except Exception as e:
-            logger.error(f"Error getting unique viewers: {e}")
-            return 0
+            logger.error(f"Error getting priority stats: {e}")
+            return {'posts': [], 'avg_ctr': 0, 'normal_ctr': 0, 'improvement': 0}
     
-    async def get_unique_clickers(self) -> int:
-        """Количество уникальных пользователей с переходами"""
+    async def get_ad_stats(self) -> Dict:
+        """Статистика по рекламным постам"""
         try:
             async with db.get_session() as session:
-                # Считаем уникальных пользователей среди постов с кликами
                 result = await session.execute(
-                    select(func.count(func.distinct(CatalogPost.user_id))).where(
-                        CatalogPost.clicks > 0
+                    select(CatalogPost).where(
+                        and_(
+                            CatalogPost.is_ad == True,
+                            CatalogPost.is_active == True
+                        )
                     )
                 )
-                return result.scalar() or 0
-        except Exception as e:
-            logger.error(f"Error getting unique clickers: {e}")
-            return 0
-    
-    async def get_top_posts_with_clicks(self, limit: int = 20) -> List[tuple]:
-        """ТОП постов с просмотрами и переходами"""
-        try:
-            async with db.get_session() as session:
-                result = await session.execute(
-                    select(
-                        CatalogPost.id,
-                        CatalogPost.views,
-                        CatalogPost.clicks,
-                        CatalogPost.name,
-                        CatalogPost.catalog_number  # ✅ ДОБАВЛЕНО
-                    ).where(CatalogPost.is_active == True)
-                    .order_by(CatalogPost.views.desc())
-                    .limit(limit)
-                )
+                ads = result.scalars().all()
                 
-                stats = result.all()
-                return stats
+                total_views = sum(ad.views for ad in ads)
+                total_clicks = sum(ad.clicks for ad in ads)
+                avg_ctr = (total_clicks / total_views * 100) if total_views > 0 else 0
+                
+                return {
+                    'ads': [
+                        {
+                            'id': ad.id,
+                            'catalog_number': ad.catalog_number,
+                            'name': ad.name,
+                            'views': ad.views,
+                            'clicks': ad.clicks
+                        }
+                        for ad in ads
+                    ],
+                    'total_views': total_views,
+                    'total_clicks': total_clicks,
+                    'avg_ctr': avg_ctr
+                }
                 
         except Exception as e:
-            logger.error(f"Error getting top posts: {e}")
-            return []
+            logger.error(f"Error getting ad stats: {e}")
+            return {'ads': [], 'total_views': 0, 'total_clicks': 0, 'avg_ctr': 0}
     
     # ============= ПРИОРИТЕТЫ И РЕКЛАМА =============
     
@@ -982,7 +1233,6 @@ class CatalogService:
         """Добавить рекламный пост"""
         try:
             async with db.get_session() as session:
-                # Генерируем уникальный номер
                 catalog_number = await self._generate_unique_catalog_number(session)
                 
                 post = CatalogPost(
@@ -991,7 +1241,7 @@ class CatalogService:
                     category='Реклама',
                     name=description,
                     tags=[],
-                    catalog_number=catalog_number,  # ✅ ДОБАВЛЕНО
+                    catalog_number=catalog_number,
                     is_active=True,
                     is_ad=True,
                     ad_frequency=self.ad_frequency
@@ -1022,7 +1272,7 @@ class CatalogService:
                 return [
                     {
                         'id': p.id,
-                        'catalog_number': p.catalog_number,  # ✅ ДОБАВЛЕНО
+                        'catalog_number': p.catalog_number,
                         'catalog_link': p.catalog_link,
                         'category': p.category,
                         'name': p.name,
@@ -1045,7 +1295,7 @@ class CatalogService:
         """Конвертировать пост в словарь"""
         return {
             'id': post.id,
-            'catalog_number': post.catalog_number,  # ✅ ДОБАВЛЕНО
+            'catalog_number': post.catalog_number,
             'catalog_link': post.catalog_link,
             'category': post.category,
             'name': post.name,
@@ -1056,6 +1306,8 @@ class CatalogService:
             'media_file_id': post.media_file_id,
             'media_group_id': post.media_group_id,
             'media_json': post.media_json or [],
+            'author_username': post.author_username,
+            'author_id': post.author_id,
             'created_at': post.created_at.isoformat() if post.created_at else None,
             'is_priority': post.is_priority,
             'is_ad': post.is_ad
