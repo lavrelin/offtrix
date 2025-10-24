@@ -70,6 +70,7 @@ from handlers.catalog_handler import (
     remove_catalog_command,
     handle_catalog_callback, 
     handle_catalog_text,
+    change_catalog_number_command
 )
 # ============= HANDLERS - ИГРЫ =============
 from handlers.games_handler import (
@@ -524,7 +525,7 @@ def main():
     application.add_handler(CommandHandler("catalog_stats_reklama", catalog_stats_reklama_command))
     application.add_handler(CommandHandler("catalogedit", edit_catalog_command))
     application.add_handler(CommandHandler("remove", remove_catalog_command))
-    
+    application.add_handler(CommandHandler("changenumber", change_catalog_number_command))
     # Stats commands
     application.add_handler(CommandHandler("channelstats", channelstats_command))
     application.add_handler(CommandHandler("fullstats", fullstats_command))
