@@ -113,12 +113,13 @@ class CatalogSubscription(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
+# models.py
 class CatalogSession(Base):
-    """Сессии просмотра каталога"""
     __tablename__ = 'catalog_sessions'
     
     id = Column(Integer, primary_key=True)
-    user_id = Column(BigInteger, nullable=False)
-    viewed_posts = Column(JSON, default=list)
+    user_id = Column(BigInteger, nullable=False, unique=True)
+    viewed_posts = Column(JSON, default=[])
+    favorites = Column(JSON, default=[])  # ← НОВОЕ ПОЛЕ
     last_activity = Column(DateTime, default=datetime.utcnow)
-    session_active = Column(Boolean, default=True) 
+    session_active = Column(Boolean, default=True)
