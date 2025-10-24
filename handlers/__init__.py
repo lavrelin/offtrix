@@ -67,6 +67,8 @@ from .catalog_handler import (
     addcatalogreklama_command,
     edit_catalog_command,
     remove_catalog_command,
+    addgirltocat_command,
+    addboytocat_command,
     
     # Статистика
     catalogview_command,                 # ← НОВАЯ КОМАНДА (уникальные пользователи)
