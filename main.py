@@ -77,6 +77,7 @@ from handlers.catalog_handler import (
     change_catalog_number_command,
     addgirltocat_command,
     addboytocat_command,
+    admincataloginfo_command
 )
 # ============= HANDLERS - ИГРЫ =============
 from handlers.games_handler import (
