@@ -54,7 +54,7 @@ from .autopost_handler import (
 )
 
 # ============= RATING (TOPPEOPLE) - OPTIMIZED v5.2 =============
-from .rating_handler_optimized import (
+from .rating_handler import (
     itsme_command,
     toppeople_command,
     topboys_command,
