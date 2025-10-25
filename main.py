@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 TrixBot Main - ВЕРСИЯ 5.2 OPTIMIZED
-Полная интеграция оптимизированных handlers с уникальными префиксами
+Улучшенная архитектура с Budapest фильтром и оптимизированным роутингом
 """
 import logging
 import asyncio
@@ -13,10 +13,8 @@ from telegram.ext import (
 from dotenv import load_dotenv
 from config import Config
 
-# ============= HANDLERS - OPTIMIZED v5.2 =============
+# ============= HANDLERS - ОСНОВНЫЕ =============
 from handlers.start_handler import start_command, help_command
-
-# Оптимизированные handlers с уникальными префиксами
 from handlers.menu_handler import handle_menu_callback
 from handlers.publication_handler import (
     handle_publication_callback, 
@@ -48,18 +46,18 @@ from handlers.admin_handler import (
     sendstats_command
 )
 
-# ============= OPTIMIZED MODULES v5.2 =============
-from handlers.rating_handler_optimized import (
+# ============= HANDLERS - RATING, CATALOG, GAMES, GIVEAWAY =============
+from handlers.rating_handler import (
     itsme_command, toppeople_command, topboys_command, topgirls_command,
     toppeoplereset_command, handle_rate_callback, handle_rate_moderation_callback,
     handle_rate_photo, handle_rate_age, handle_rate_name, handle_rate_about, handle_rate_profile
 )
-from handlers.catalog_handler_optimized import (
+from handlers.catalog_handler import (
     catalog_command, search_command, addtocatalog_command, review_command,
     categoryfollow_command, addgirltocat_command, addboytocat_command,
     handle_catalog_callback, handle_catalog_text, handle_catalog_media
 )
-from handlers.games_handler_optimized import (
+from handlers.games_handler import (
     wordadd_command, wordedit_command, wordclear_command,
     wordon_command, wordoff_command, wordinfo_command,
     wordinfoedit_command, anstimeset_command,
@@ -68,11 +66,11 @@ from handlers.games_handler_optimized import (
     rollreset_command, rollstatus_command, mynumber_command,
     handle_game_text_input, handle_game_media_input, handle_game_callback
 )
-from handlers.giveaway_handler_optimized import (
+from handlers.giveaway_handler import (
     giveaway_command, handle_giveaway_callback, p2p_command
 )
 
-# ============= OTHER HANDLERS (unchanged) =============
+# ============= HANDLERS - ОСТАЛЬНЫЕ =============
 from handlers.basic_handler import id_command, participants_command, report_command
 from handlers.link_handler import trixlinks_command
 from handlers.advanced_moderation import (
@@ -106,19 +104,22 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# ============= BUDAPEST CHAT FILTER =============
+# ============= BUDAPEST CHAT FILTER - ОПТИМИЗИРОВАННЫЙ =============
 class BudapestChatFilter:
-    """Custom filter to ignore commands from Budapest chat"""
+    """
+    Фильтр для автоматического игнорирования команд из Budapest чата.
+    Заменяет необходимость оборачивать каждую команду декоратором.
+    """
     def __init__(self):
         self.budapest_chat_id = Config.BUDAPEST_CHAT_ID
     
     def __call__(self, update: Update) -> bool:
-        """Return True if message is NOT from Budapest chat"""
+        """Возвращает True если сообщение НЕ из Budapest чата"""
         if not update.effective_chat:
             return True
         return update.effective_chat.id != self.budapest_chat_id
 
-# Create filter instance
+# Создаем экземпляр фильтра
 budapest_filter = BudapestChatFilter()
 
 async def init_db_tables():
@@ -378,7 +379,7 @@ def main():
     print("🚀 Starting TrixBot v5.2 OPTIMIZED...")
     print(f"📊 Database: {Config.DATABASE_URL[:30]}...")
     print(f"🚫 Budapest chat: {Config.BUDAPEST_CHAT_ID}")
-    print("⚡ Optimized handlers: menu, publication, moderation, admin, piar, catalog, games, giveaway, rating")
+    print("⚡ Optimized: Budapest filter + callback routing")
     
     # Initialize DB
     db_initialized = loop.run_until_complete(init_db_tables())
@@ -528,17 +529,13 @@ def main():
     print("\n" + "="*50)
     print("🤖 TRIXBOT v5.2 OPTIMIZED IS READY!")
     print("="*50)
-    print(f"⚡ Optimized modules: 8 (all major handlers)")
-    print(f"📋 Unique prefixes: mnc_, pbc_, mdc_, adc_, prc_, ctc_, gmc_, gwc_, rtc_, rmc_, ttc_, hpc_")
+    print(f"⚡ Optimized: Budapest filter (class-based)")
+    print(f"📋 Callback prefixes: mnc_, pbc_, mdc_, adc_, prc_, ctc_, gmc_, gwc_, rtc_, rmc_, ttc_, hpc_")
     print(f"📊 Stats interval: {Config.STATS_INTERVAL_HOURS}h")
     print(f"📢 Moderation: {Config.MODERATION_GROUP_ID}")
     print(f"🔧 Admin group: {Config.ADMIN_GROUP_ID}")
     print(f"🚫 Budapest chat (AUTO-FILTERED): {Config.BUDAPEST_CHAT_ID}")
     print(f"⏰ Cooldown: {Config.COOLDOWN_SECONDS // 3600}h")
-    print(f"📸 Catalog v5.2: ✅ Optimized")
-    print(f"🎮 Games v5.2: ✅ Optimized")
-    print(f"🎁 Giveaway v5.2: ✅ Optimized")
-    print(f"⭐ Rating v5.2: ✅ Optimized")
     
     if db_initialized:
         print(f"💾 Database: ✅ Connected")
