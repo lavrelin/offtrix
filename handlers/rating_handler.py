@@ -70,7 +70,7 @@ async def generate_catalog_number() -> int:
     from services.catalog_service import catalog_service
     
     # Получаем занятые номера из каталога
-    from services.db import db
+    async from services.db import db
     from models import CatalogPost
     from sqlalchemy import select
     
@@ -529,7 +529,7 @@ async def send_rating_to_moderation(
 async def handle_rate_moderation_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработка модерации"""
     query = update.callback_query
-    await query.answer()
+    # НЕ отвечаем здесь - ответ будет в дочерних функциях
     
     data = query.data.split(":")
     action = data[1] if len(data) > 1 else None
@@ -581,12 +581,10 @@ async def start_edit_rating_post(update: Update, context: ContextTypes.DEFAULT_T
             reply_markup=InlineKeyboardMarkup(keyboard),
             parse_mode='Markdown'
         )
-    except:
-        await query.message.reply_text(
-            text,
-            reply_markup=InlineKeyboardMarkup(keyboard),
-            parse_mode='Markdown'
-        )
+        await query.answer()  # Отвечаем после успешного редактирования
+    except Exception as e:
+        logger.error(f"Error editing caption in moderation: {e}")
+        await query.answer("❌ Ошибка редактирования", show_alert=True)
 
 # ============= ОДОБРЕНИЕ ПОСТА =============
 
