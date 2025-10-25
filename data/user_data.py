@@ -83,6 +83,15 @@ def is_user_banned(user_id: int) -> bool:
         return False
     return user_data[user_id].get('banned', False)
 
+def is_user_muted(user_id: int) -> bool:
+    """Проверить, замучен ли пользователь"""
+    if user_id not in user_data:
+        return False
+    muted_until = user_data[user_id].get('muted_until')
+    if not muted_until:
+        return False
+    return datetime.now() < muted_until
+
 def ban_user(user_id: int, reason: str = "Не указана"):
     """Забанить пользователя"""
     if user_id in user_data:
@@ -123,6 +132,7 @@ __all__ = [
     'get_user_by_username',
     'get_user_by_id',
     'is_user_banned',
+    'is_user_muted',
     'ban_user',
     'unban_user',
     'mute_user',
