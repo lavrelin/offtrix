@@ -70,7 +70,7 @@ async def generate_catalog_number() -> int:
     from services.catalog_service import catalog_service
     
     # Получаем занятые номера из каталога
-    async from services.db import db
+    from services.db import db
     from models import CatalogPost
     from sqlalchemy import select
     
