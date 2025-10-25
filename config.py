@@ -41,7 +41,7 @@ class Config:
     'budapest_main': int(os.getenv("BUDAPEST_MAIN_ID", "-1002743668534")),
     'budapest_chat': int(os.getenv("BUDAPEST_CHAT_STATS_ID", "-1002883770818")),
     'partners': int(os.getenv("PARTNERS_ID", "-1002919380244")),
-    'budapest_people': int(os.getenv("BUDAPEST_PEOPLE_ID", "-1003114019170")),  # НОВОЕ
+    'budapest_people': int(os.getenv("BUDAPEST_PEOPLE_ID", "-1003088023508")),  # НОВОЕ
      }  # НОВОЕ
     
     # Альтернативные каналы (если нужны)
