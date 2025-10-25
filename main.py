@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
-TrixBot Main - ВЕРСИЯ 5.0
-С интеграцией catalog_service v5.0 и rating_handler v5.0
+TrixBot Main - ВЕРСИЯ 5.0 FIXED
+Исправлена синтаксическая ошибка с импортами
 """
 import logging
 import asyncio
@@ -420,7 +420,6 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         # ============= ПРИОРИТЕТ 1: RATING HANDLERS (САМЫЙ ВЫСОКИЙ!) =============
         # КРИТИЧНО: Проверяем rating ПЕРЕД всеми остальными медиа-обработчиками
-        # Иначе catalog перехватит фото для /itsme
         
         if waiting_for == 'rate_photo':
             logger.info(f"[RATING] Processing photo for user {user_id}")
