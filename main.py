@@ -78,6 +78,7 @@ from handlers.catalog_handler import (
     addgirltocat_command,
     addboytocat_command,
     catalogads_command,
+    removeads_command,
     admincataloginfo_command
 )
 # ============= HANDLERS - ИГРЫ =============
