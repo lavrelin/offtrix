@@ -23,7 +23,20 @@ from services.catalog_service import catalog_service, CATALOG_CATEGORIES
 
 logger = logging.getLogger(__name__)
 
-async def extract_media_from_link(bot: Bot, telegram_link:
+# -*- coding: utf-8 -*-
+"""
+ИСПРАВЛЕННАЯ ФУНКЦИЯ extract_media_from_link - ВЕРСИЯ 2.0
+
+КРИТИЧНО: Используем getMessage API напрямую, без пересылки себе
+"""
+
+async def extract_media_from_link(bot: Bot, telegram_link: str) -> Optional[Dict]:
+    """
+    Автоматический импорт медиа из поста - РАБОЧАЯ ВЕРСИЯ 2.0
+    
+    ВАЖНО: Telegram запрещает ботам отправлять сообщения другим ботам,
+    поэтому мы используем прямой API для получения информации о сообщении.
+    """
     try:
         if not telegram_link or 't.me/' not in telegram_link:
             logger.warning(f"Invalid link format: {telegram_link}")
@@ -242,6 +255,24 @@ async def extract_media_from_link(bot: Bot, telegram_link:
             'success': False,
             'message': f'❌ Критическая ошибка: {str(e)[:100]}'
         }
+
+
+# ============= ИНСТРУКЦИЯ ПО ПРИМЕНЕНИЮ =============
+"""
+ЗАМЕНИТЕ функцию extract_media_from_link в handlers/catalog_handler.py
+
+КЛЮЧЕВЫЕ ИЗМЕНЕНИЯ В ВЕРСИИ 2.0:
+1. НЕ используем copyMessage к самому себе (bot.id) - это запрещено!
+2. Пересылаем во временный чат (MODERATION_GROUP_ID)
+3. Извлекаем file_id из пересланного сообщения
+4. Удаляем временное сообщение
+5. Возвращаем file_id для использования
+
+ВАЖНО:
+- Бот должен быть админом в канале-источнике
+- Бот должен быть админом в MODERATION_GROUP_ID
+- Права на пересылку и удаление сообщений
+"""
 
 async def send_catalog_post_with_media(bot: Bot, chat_id: int, post: Dict, index: int, total: int) -> bool:
     """Отправка карточки каталога С НОВЫМ ФОРМАТОМ"""
