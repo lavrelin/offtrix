@@ -166,8 +166,9 @@ async def send_catalog_post(bot: Bot, chat_id: int, post: Dict, index: int, tota
         # Add tags
         tags = post.get('tags', [])
         if tags and isinstance(tags, list):
+            pattern = r'[^\w\-]'
             clean_tags = [
-                f"#{re.sub(r'[^\w\-]', '', str(tag).replace(' ', '_'))}"
+                f"#{re.sub(pattern, '', str(tag).replace(' ', '_'))}"
                 for tag in tags[:5]
                 if tag
             ]
