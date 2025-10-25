@@ -1,4 +1,8 @@
 # -*- coding: utf-8 -*-
+"""
+Channel Stats Service v2.0
+Отслеживание изменений пользователей за Day/Week/Month
+"""
 import logging
 from datetime import datetime, timedelta
 from typing import Dict, Any, Optional
@@ -7,17 +11,16 @@ import pytz
 
 logger = logging.getLogger(__name__)
 
-# Timezone Будапешта
 BUDAPEST_TZ = pytz.timezone('Europe/Budapest')
 
 class ChannelStatsService:
-    """Сервис для сбора статистики каналов и хeatmap активности"""
+    """Сервис для сбора статистики каналов с отслеживанием изменений"""
     
     def __init__(self):
         self.bot = None
-        self.previous_stats = {}  # Хранилище предыдущей статистики
-        self.chat_messages = {}   # Счетчик сообщений в чатах
-        self.hourly_activity = {} # Heatmap активности по часам
+        self.stats_history = {}  # История статистики: {channel: {date: count}}
+        self.chat_messages = {}
+        self.hourly_activity = {}
     
     def set_bot(self, bot):
         """Устанавливает экземпляр бота"""
@@ -25,40 +28,45 @@ class ChannelStatsService:
         logger.info("Bot instance set for channel stats service")
     
     async def get_channel_stats(self, channel_id: int, channel_name: str) -> Dict[str, Any]:
-        """Получить статистику канала"""
+        """Получить статистику канала с изменениями"""
         try:
             if not self.bot:
                 logger.warning("Bot instance not set")
                 return None
             
-            # Получаем информацию о чате
             chat = await self.bot.get_chat(channel_id)
             
-            # Получаем количество участников
             try:
                 member_count = await self.bot.get_chat_member_count(channel_id)
             except Exception as e:
                 logger.warning(f"Could not get member count for {channel_name}: {e}")
                 member_count = None
             
+            # Инициализируем историю если нет
+            if channel_name not in self.stats_history:
+                self.stats_history[channel_name] = {}
+            
+            now = datetime.now(BUDAPEST_TZ)
+            today_key = now.strftime('%Y-%m-%d')
+            
+            # Сохраняем текущее значение
+            self.stats_history[channel_name][today_key] = member_count
+            
             # Вычисляем изменения
-            previous_count = self.previous_stats.get(channel_name, {}).get('member_count', 0)
-            change = member_count - previous_count if member_count and previous_count else 0
+            changes = self._calculate_changes(channel_name, member_count, now)
             
             stats = {
                 'name': channel_name,
                 'title': chat.title,
                 'member_count': member_count,
-                'previous_count': previous_count,
-                'change': change,
+                'day_change': changes['day_change'],
+                'day_prev': changes['day_prev'],
+                'week_change': changes['week_change'],
+                'week_prev': changes['week_prev'],
+                'month_change': changes['month_change'],
+                'month_prev': changes['month_prev'],
                 'type': chat.type,
-                'timestamp': datetime.now(BUDAPEST_TZ)
-            }
-            
-            # Сохраняем текущую статистику для следующего сравнения
-            self.previous_stats[channel_name] = {
-                'member_count': member_count,
-                'timestamp': datetime.now(BUDAPEST_TZ)
+                'timestamp': now
             }
             
             logger.info(f"Stats collected for {channel_name}: {member_count} members")
@@ -72,33 +80,36 @@ class ChannelStatsService:
                 'timestamp': datetime.now(BUDAPEST_TZ)
             }
     
-    async def get_chat_message_stats(self, chat_id: int, chat_name: str) -> Dict[str, Any]:
-        """Получить статистику сообщений в чате"""
-        try:
-            # Получаем статистику из счетчика
-            message_count = self.chat_messages.get(chat_id, {}).get('count', 0)
-            last_reset = self.chat_messages.get(chat_id, {}).get('last_reset', datetime.now(BUDAPEST_TZ))
-            
-            # Вычисляем период
-            hours_since_reset = (datetime.now(BUDAPEST_TZ) - last_reset).total_seconds() / 3600
-            
-            stats = {
-                'name': chat_name,
-                'message_count': message_count,
-                'hours_since_reset': round(hours_since_reset, 1),
-                'messages_per_hour': round(message_count / hours_since_reset, 1) if hours_since_reset > 0 else 0,
-                'timestamp': datetime.now(BUDAPEST_TZ)
-            }
-            
-            return stats
-            
-        except Exception as e:
-            logger.error(f"Error getting message stats for {chat_name}: {e}")
-            return {
-                'name': chat_name,
-                'error': str(e),
-                'timestamp': datetime.now(BUDAPEST_TZ)
-            }
+    def _calculate_changes(self, channel_name: str, current_count: int, now: datetime) -> Dict[str, Any]:
+        """Вычислить изменения за день, неделю, месяц"""
+        history = self.stats_history.get(channel_name, {})
+        
+        # День назад
+        day_ago_key = (now - timedelta(days=1)).strftime('%Y-%m-%d')
+        day_prev = history.get(day_ago_key, current_count)
+        day_change = current_count - day_prev if day_prev else 0
+        
+        # Неделя назад (понедельник)
+        days_to_monday = now.weekday()  # 0 = Monday
+        week_start = now - timedelta(days=days_to_monday)
+        week_ago_key = week_start.strftime('%Y-%m-%d')
+        week_prev = history.get(week_ago_key, current_count)
+        week_change = current_count - week_prev if week_prev else 0
+        
+        # Месяц назад (1-е число)
+        month_start = now.replace(day=1)
+        month_ago_key = month_start.strftime('%Y-%m-%d')
+        month_prev = history.get(month_ago_key, current_count)
+        month_change = current_count - month_prev if month_prev else 0
+        
+        return {
+            'day_change': day_change,
+            'day_prev': day_prev,
+            'week_change': week_change,
+            'week_prev': week_prev,
+            'month_change': month_change,
+            'month_prev': month_prev,
+        }
     
     def increment_message_count(self, chat_id: int):
         """Увеличить счетчик сообщений для чата"""
@@ -110,7 +121,7 @@ class ChannelStatsService:
         
         self.chat_messages[chat_id]['count'] += 1
         
-        # НОВОЕ: Добавляем в heatmap активности
+        # Добавляем в heatmap активности
         current_hour = datetime.now(BUDAPEST_TZ).hour
         chat_name = self._get_chat_name_by_id(chat_id)
         
@@ -128,67 +139,43 @@ class ChannelStatsService:
     
     def _get_chat_name_by_id(self, chat_id: int) -> str:
         """Получить название чата по ID"""
-        chat_names = {
-            -1002922212434: "Gambling chat",
-            -1002601716810: "Каталог услуг",
-            -1003033694255: "Куплю/Отдам/Продам",
-            -1002743668534: "Будапешт канал",
-            -1002883770818: "Будапешт чат",
-            -1002919380244: "Budapest Partners",
+        chat_map = {
+            Config.STATS_CHANNELS.get('gambling_chat'): "🌑 Catalog",
+            Config.STATS_CHANNELS.get('catalog'): "🌒 Marketplace",
+            Config.STATS_CHANNELS.get('trade'): "🌓 Main",
+            Config.STATS_CHANNELS.get('budapest_main'): "🌔 Chat",
+            Config.STATS_CHANNELS.get('budapest_chat'): "🌕 Partners",
+            Config.STATS_CHANNELS.get('partners'): "🌖 Social",
         }
-        return chat_names.get(chat_id, f"chat_{chat_id}")
+        return chat_map.get(chat_id, f"chat_{chat_id}")
     
     async def get_all_stats(self) -> Dict[str, Any]:
-        """Собрать статистику по всем каналам и чатам"""
+        """Собрать статистику по всем каналам"""
         try:
             all_stats = {
                 'timestamp': datetime.now(BUDAPEST_TZ),
                 'channels': [],
-                'chats': [],
-                'heatmap': self.hourly_activity
-            }
-            
-            # Каналы для мониторинга
-            channels = {
-                'gambling_chat': -1002922212434,
-                'catalog': -1002601716810,
-                'trade': -1003033694255,
-                'budapest_main': -1002743668534,
-                'budapest_chat': -1002883770818,
-                'partners': -1002919380244,
+                'total_changes': {
+                    'day': 0,
+                    'week': 0,
+                    'month': 0
+                }
             }
             
             # Собираем статистику по каналам
-            for name, channel_id in channels.items():
+            for name, channel_id in Config.STATS_CHANNELS.items():
                 try:
                     stats = await self.get_channel_stats(channel_id, name)
-                    if stats:
+                    if stats and 'error' not in stats:
                         all_stats['channels'].append(stats)
+                        
+                        # Суммируем изменения
+                        all_stats['total_changes']['day'] += stats.get('day_change', 0)
+                        all_stats['total_changes']['week'] += stats.get('week_change', 0)
+                        all_stats['total_changes']['month'] += stats.get('month_change', 0)
+                        
                 except Exception as e:
                     logger.error(f"Error collecting stats for {name}: {e}")
-                    all_stats['channels'].append({
-                        'name': name,
-                        'error': str(e)
-                    })
-            
-            # Собираем статистику по чатам (сообщения)
-            chat_ids = {
-                'gambling_chat': -1002922212434,
-                'catalog': -1002601716810,
-                'trade': -1003033694255,
-                'budapest_main': -1002743668534,
-                'budapest_chat': -1002883770818,
-                'partners': -1002919380244,
-            }
-            
-            for name, chat_id in chat_ids.items():
-                if chat_id:
-                    try:
-                        stats = await self.get_chat_message_stats(chat_id, name)
-                        if stats:
-                            all_stats['chats'].append(stats)
-                    except Exception as e:
-                        logger.error(f"Error collecting message stats for {name}: {e}")
             
             return all_stats
             
@@ -197,127 +184,100 @@ class ChannelStatsService:
             return {
                 'timestamp': datetime.now(BUDAPEST_TZ),
                 'error': str(e),
-                'channels': [],
-                'chats': [],
-                'heatmap': {}
+                'channels': []
             }
     
     def format_stats_message(self, stats: Dict[str, Any]) -> str:
-        """Форматировать статистику в красивое сообщение с heatmap"""
+        """Форматировать статистику в красивое сообщение"""
         try:
             timestamp = stats['timestamp'].strftime('%d.%m.%Y %H:%M')
             
-            message = f"📊 **РАСШИРЕННАЯ СТАТИСТИКА**\n"
-            message += f"⏰ {timestamp} (Будапешт)\n\n"
+            message = f"📊 **РАСШИРЕННАЯ СТАТИСТИКА**\n\n"
+            message += f"🕓 Обновлено {timestamp} (Будапешт)\n\n"
             
-            # ============ СТАТИСТИКА КАНАЛОВ ============
+            # Названия каналов
+            channel_names = {
+                'gambling_chat': '🌑 Catalog',
+                'catalog': '🌒 Marketplace',
+                'trade': '🌓 Main',
+                'budapest_main': '🌔 Chat',
+                'budapest_chat': '🌕 Partners',
+                'partners': '🌖 Social',
+                'budapest_people': '🌗 Instagram',
+            }
+            
+            # Статистика каналов
             if stats.get('channels'):
-                message += "📢 **КАНАЛЫ СООБЩЕСТВА:**\n\n"
-                
-                channel_emojis = {
-                    'gambling_chat': '🐦‍🔥',
-                    'catalog': '🙅',
-                    'trade': '🕵️‍♂️',
-                    'budapest_main': '🙅‍♂️',
-                    'budapest_chat': '🙅‍♀️',
-                    'partners': '🧶'
-                }
+                message += "📢 **СТАТИСТИКА КАНАЛОВ СООБЩЕСТВА**\n\n"
                 
                 for channel in stats['channels']:
                     if 'error' in channel:
                         continue
                     
-                    emoji = channel_emojis.get(channel['name'], '📺')
-                    title = channel.get('title', channel['name'])
+                    name = channel_names.get(channel['name'], channel['name'])
                     count = channel.get('member_count', 'N/A')
-                    change = channel.get('change', 0)
                     
-                    message += f"{emoji} **{title}**\n"
-                    message += f"👥 {count} участников"
+                    day_change = channel.get('day_change', 0)
+                    day_prev = channel.get('day_prev', 0)
+                    day_emoji = "📈" if day_change > 0 else "📉" if day_change < 0 else "➖"
                     
-                    if change > 0:
-                        message += f" 📈 +{change}\n"
-                    elif change < 0:
-                        message += f" 📉 {change}\n"
-                    else:
-                        message += f" ➖\n"
-                    message += "\n"
+                    week_change = channel.get('week_change', 0)
+                    week_prev = channel.get('week_prev', 0)
+                    week_emoji = "📈" if week_change > 0 else "📉" if week_change < 0 else "➖"
+                    
+                    month_change = channel.get('month_change', 0)
+                    month_prev = channel.get('month_prev', 0)
+                    month_emoji = "📈" if month_change > 0 else "📉" if month_change < 0 else "➖"
+                    
+                    message += f"{name} — **{count}** участников.\n"
+                    message += f"День: {day_emoji} {day_change:+d} ({day_prev})\n"
+                    message += f"Неделя: {week_emoji} {week_change:+d} ({week_prev})\n"
+                    message += f"Месяц: {month_emoji} {month_change:+d} ({month_prev})\n\n"
+                
+                # Общие изменения
+                if 'total_changes' in stats:
+                    tc = stats['total_changes']
+                    message += f"**Общий прирост подписчиков:**\n"
+                    message += f"День: {tc['day']:+d}\n"
+                    message += f"Неделя: {tc['week']:+d}\n"
+                    message += f"Месяц: {tc['month']:+d}\n\n"
             
-            # ============ СТАТИСТИКА СООБЩЕНИЙ ============
-            if stats.get('chats'):
-                message += "💬 **АКТИВНОСТЬ В ЧАТАХ:**\n\n"
-                
-                total_messages = 0
-                avg_per_hour = 0
-                
-                for chat in stats['chats']:
-                    if 'error' in chat:
-                        continue
-                    
-                    count = chat.get('message_count', 0)
-                    total_messages += count
-                    per_hour = chat.get('messages_per_hour', 0)
-                    
-                    message += f"📨 **{chat['name']}**\n"
-                    message += f"Сообщений: {count} ({per_hour}/час)\n\n"
-                
-                if stats['chats']:
-                    avg_per_hour = round(total_messages / len([c for c in stats['chats'] if 'error' not in c]), 1)
-                
-                message += f"📊 **Всего сообщений:** {total_messages}\n"
-                message += f"📈 **Среднее:** {avg_per_hour}/час\n\n"
-            
-            # ============ HEATMAP АКТИВНОСТИ ============
-            if stats.get('heatmap'):
-                message += "🕑 **HEATMAP АКТИВНОСТИ ПО ЧАСАМ (Будапешт):**\n\n"
-                
-                for chat_name, hourly_data in stats['heatmap'].items():
-                    if not hourly_data:
-                        continue
-                    
-                    message += f"**{chat_name.upper()}**\n"
-                    
-                    # Находим пиковые часы
-                    max_hour = max(hourly_data, key=hourly_data.get)
-                    max_value = hourly_data[max_hour]
-                    
-                    # Форматируем heatmap в виде строки
-                    heatmap_line = ""
-                    for hour in sorted(hourly_data.keys()):
-                        value = hourly_data[hour]
-                        
-                        if value == 0:
-                            heatmap_line += "⬜"
-                        elif value <= max_value * 0.25:
-                            heatmap_line += "🟦"
-                        elif value <= max_value * 0.5:
-                            heatmap_line += "🟩"
-                        elif value <= max_value * 0.75:
-                            heatmap_line += "🟨"
-                        else:
-                            heatmap_line += "🟥"
-                    
-                    message += heatmap_line + "\n"
-                    
-                    # Легенда часов
-                    hours_legend = "00 04 08 12 16 20\n"
-                    message += hours_legend
-                    
-                    # Пиковое время
-                    message += f"🔥 **Пик активности:** {max_hour} ({max_value} сообщений)\n\n"
-            
-            # ============ СТАТИСТИКА БОТА ============
+            # Статистика бота
             from data.user_data import user_data
-            message += "🤖 **СТАТИСТИКА БОТА:**\n\n"
+            message += "⚙️ **СТАТИСТИКА КОМАНД БОТА**\n\n"
             
             total_users = len(user_data)
-            active_24h = sum(1 for data in user_data.values() if 
-                            datetime.now() - data['last_activity'] <= timedelta(days=1))
+            active_24h = sum(
+                1 for d in user_data.values() 
+                if datetime.now() - d['last_activity'] <= timedelta(days=1)
+            )
+            active_week = sum(
+                1 for d in user_data.values() 
+                if datetime.now() - d['last_activity'] <= timedelta(days=7)
+            )
+            active_month = sum(
+                1 for d in user_data.values() 
+                if datetime.now() - d['last_activity'] <= timedelta(days=30)
+            )
             
-            message += f"👥 Всего пользователей: {total_users}\n"
-            message += f"🟢 Активных за 24ч: {active_24h}\n\n"
+            total_commands = sum(d.get('command_count', 0) for d in user_data.values())
             
-            message += f"📈 Следующая статистика через {Config.STATS_INTERVAL_HOURS} часов"
+            message += f"⌨️ Всего вызовов команд: {total_commands}\n\n"
+            message += f"👥 Уникальные пользователи Трикс бота:\n"
+            message += f"Day: {active_24h}\n"
+            message += f"Week: {active_week}\n"
+            message += f"Month: {active_month}\n\n"
+            
+            # Топ команд
+            from data.user_data import get_top_commands
+            top_commands = get_top_commands(5)
+            
+            if top_commands:
+                message += "📏🏆 **TOP ✋FIVE:**\n"
+                medals = ['🥇', '🥈', '🥉', '⚡️', '💥']
+                for i, (cmd, count) in enumerate(top_commands):
+                    medal = medals[i] if i < len(medals) else '▫️'
+                    message += f"{medal} /{cmd} — {count} раз\n"
             
             return message
             
