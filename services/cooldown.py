@@ -39,19 +39,22 @@ class CooldownService:
     
     # ============= ДЕКОРАТОРЫ =============
     
-    def cooldown(
-        self, 
-        seconds: int = None,
-        cooldown_type: CooldownType = CooldownType.NORMAL,
-        command_name: str = None,
-        bypass_for_mods: bool = True
-        # Проверка кулдауна
-        can_use, remaining = await cooldown_service.check_cooldown(
+    async def cooldown(
+    self,
+    seconds: int = None,
+    cooldown_type: CooldownType = CooldownType.NORMAL,
+    command_name: str = None,
+    bypass_for_mods: bool = True
+):
+    # Проверка кулдауна
+    can_use, remaining = await cooldown_service.check_cooldown(
         user_id=user_id,
         command='itsme',
         duration=24 * 3600,
         cooldown_type=CooldownType.NORMAL
     )
+
+    return can_use, remaining
 
     # Установка кулдауна
     await cooldown_service.set_cooldown(
