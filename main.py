@@ -1,4 +1,8 @@
 # -*- coding: utf-8 -*-
+"""
+TrixBot Main - ВЕРСИЯ 5.0
+С интеграцией catalog_service v5.0 и rating_handler v5.0
+"""
 import logging
 import asyncio
 from telegram import Update
@@ -26,16 +30,6 @@ from handlers.moderation_handler import (
     top_command,
     lastseen_command
 )
-from handlers.rating_handler import (
-    itsme_command, toppeople_command, topboys_command, 
-    topgirls_command, toppeoplereset_command, handle_rate_callback,
-    handle_rate_moderation_callback,
-    handle_rate_photo,
-    handle_rate_age,
-    handle_rate_name,
-    handle_rate_about,
-    handle_rate_profile
-)
 from handlers.profile_handler import handle_profile_callback
 from handlers.basic_handler import id_command, participants_command, report_command
 from handlers.link_handler import trixlinks_command
@@ -54,15 +48,34 @@ from handlers.advanced_moderation import (
 
 # ============= HANDLERS - АДМИН =============
 from handlers.admin_handler import admin_command, say_command, handle_admin_callback, broadcast_command, sendstats_command
+
+# ============= HANDLERS - AUTOPOST =============
 from handlers.autopost_handler import autopost_command, autopost_test_command
-# ============= HANDLERS - КАТАЛОГ С МЕДИА =============
+
+# ============= HANDLERS - RATING (TOPPEOPLE) v5.0 =============
+from handlers.rating_handler import (
+    itsme_command,
+    toppeople_command,
+    topboys_command,
+    topgirls_command,
+    toppeoplereset_command,
+    handle_rate_callback,
+    handle_rate_moderation_callback,
+    handle_rate_photo,
+    handle_rate_age,
+    handle_rate_name,
+    handle_rate_about,
+    handle_rate_profile
+)
+
+# ============= HANDLERS - КАТАЛОГ v5.0 =============
 from handlers.catalog_handler import (
-    catalog_command, 
-    search_command, 
+    catalog_command,
+    search_command,
     addtocatalog_command,
-    review_command, 
+    review_command,
     categoryfollow_command,
-    catalogpriority_command, 
+    catalogpriority_command,
     addcatalogreklama_command,
     catalogviews_command,
     catalogview_command,
@@ -73,9 +86,9 @@ from handlers.catalog_handler import (
     catalog_stats_reklama_command,
     edit_catalog_command,
     remove_catalog_command,
-    handle_catalog_callback, 
+    handle_catalog_callback,
     handle_catalog_text,
-    handle_catalog_media,# ← ДОБАВЬТЕ ЭТУ СТРОКУ
+    handle_catalog_media,
     change_catalog_number_command,
     addgirltocat_command,
     addboytocat_command,
@@ -83,6 +96,7 @@ from handlers.catalog_handler import (
     removeads_command,
     admincataloginfo_command
 )
+
 # ============= HANDLERS - ИГРЫ =============
 from handlers.games_handler import (
     wordadd_command, wordedit_command, wordclear_command,
@@ -246,12 +260,15 @@ p2p_command = ignore_budapest_chat_commands(p2p_command)
 tickets_command = ignore_budapest_chat_commands(tickets_command)
 myticket_command = ignore_budapest_chat_commands(myticket_command)
 trixtickets_command = ignore_budapest_chat_commands(trixtickets_command)
+
+# Rating commands
 itsme_command = ignore_budapest_chat_commands(itsme_command)
 toppeople_command = ignore_budapest_chat_commands(toppeople_command)
 topboys_command = ignore_budapest_chat_commands(topboys_command)
 topgirls_command = ignore_budapest_chat_commands(topgirls_command)
 toppeoplereset_command = ignore_budapest_chat_commands(toppeoplereset_command)
 
+# Moderation commands
 ban_command = ignore_budapest_chat_commands(ban_command)
 unban_command = ignore_budapest_chat_commands(unban_command)
 mute_command = ignore_budapest_chat_commands(mute_command)
@@ -271,7 +288,7 @@ admins_command = ignore_budapest_chat_commands(admins_command)
 autopost_command = ignore_budapest_chat_commands(autopost_command)
 autopost_test_command = ignore_budapest_chat_commands(autopost_test_command)
 
-# Wrap game commands
+# Game commands
 wordadd_command = ignore_budapest_chat_commands(wordadd_command)
 wordedit_command = ignore_budapest_chat_commands(wordedit_command)
 wordclear_command = ignore_budapest_chat_commands(wordclear_command)
@@ -289,14 +306,7 @@ rollreset_command = ignore_budapest_chat_commands(rollreset_command)
 rollstatus_command = ignore_budapest_chat_commands(rollstatus_command)
 mynumber_command = ignore_budapest_chat_commands(mynumber_command)
 
-# Wrap rating commands
-itsme_command = ignore_budapest_chat_commands(itsme_command)
-toppeople_command = ignore_budapest_chat_commands(toppeople_command)
-topboys_command = ignore_budapest_chat_commands(topboys_command)
-topgirls_command = ignore_budapest_chat_commands(topgirls_command)
-toppeoplereset_command = ignore_budapest_chat_commands(toppeoplereset_command)
-
-# Wrap admin TrixTicket commands
+# TrixTicket admin commands
 givett_command = ignore_budapest_chat_commands(givett_command)
 removett_command = ignore_budapest_chat_commands(removett_command)
 userstt_command = ignore_budapest_chat_commands(userstt_command)
@@ -304,6 +314,30 @@ trixticketstart_command = ignore_budapest_chat_commands(trixticketstart_command)
 ttrenumber_command = ignore_budapest_chat_commands(ttrenumber_command)
 ttsave_command = ignore_budapest_chat_commands(ttsave_command)
 trixticketclear_command = ignore_budapest_chat_commands(trixticketclear_command)
+
+# Catalog commands
+catalog_command = ignore_budapest_chat_commands(catalog_command)
+search_command = ignore_budapest_chat_commands(search_command)
+addtocatalog_command = ignore_budapest_chat_commands(addtocatalog_command)
+review_command = ignore_budapest_chat_commands(review_command)
+categoryfollow_command = ignore_budapest_chat_commands(categoryfollow_command)
+catalogpriority_command = ignore_budapest_chat_commands(catalogpriority_command)
+addcatalogreklama_command = ignore_budapest_chat_commands(addcatalogreklama_command)
+catalogviews_command = ignore_budapest_chat_commands(catalogviews_command)
+catalogview_command = ignore_budapest_chat_commands(catalogview_command)
+catalog_stats_users_command = ignore_budapest_chat_commands(catalog_stats_users_command)
+catalog_stats_categories_command = ignore_budapest_chat_commands(catalog_stats_categories_command)
+catalog_stats_popular_command = ignore_budapest_chat_commands(catalog_stats_popular_command)
+catalog_stats_priority_command = ignore_budapest_chat_commands(catalog_stats_priority_command)
+catalog_stats_reklama_command = ignore_budapest_chat_commands(catalog_stats_reklama_command)
+edit_catalog_command = ignore_budapest_chat_commands(edit_catalog_command)
+remove_catalog_command = ignore_budapest_chat_commands(remove_catalog_command)
+change_catalog_number_command = ignore_budapest_chat_commands(change_catalog_number_command)
+addgirltocat_command = ignore_budapest_chat_commands(addgirltocat_command)
+addboytocat_command = ignore_budapest_chat_commands(addboytocat_command)
+admincataloginfo_command = ignore_budapest_chat_commands(admincataloginfo_command)
+catalogads_command = ignore_budapest_chat_commands(catalogads_command)
+removeads_command = ignore_budapest_chat_commands(removeads_command)
 
 async def handle_all_callbacks(update: Update, context):
     """Router for all callback queries"""
@@ -362,7 +396,7 @@ async def handle_all_callbacks(update: Update, context):
             pass
 
 async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Main message handler - С ПРАВИЛЬНЫМ ПРИОРИТЕТОМ ОБРАБОТКИ"""
+    """Main message handler - ВЕРСИЯ 5.0 С ПРАВИЛЬНЫМ ПРИОРИТЕТОМ"""
     user_id = update.effective_user.id
     chat_id = update.effective_chat.id
     
@@ -389,22 +423,29 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Иначе catalog перехватит фото для /itsme
         
         if waiting_for == 'rate_photo':
-            from handlers.rating_handler import handle_rate_photo
             logger.info(f"[RATING] Processing photo for user {user_id}")
             await handle_rate_photo(update, context)
             return
         
+        if waiting_for == 'rate_name':
+            logger.info(f"[RATING] Processing name for user {user_id}")
+            await handle_rate_name(update, context)
+            return
+        
+        if waiting_for == 'rate_age':
+            logger.info(f"[RATING] Processing age for user {user_id}")
+            await handle_rate_age(update, context)
+            return
+        
+        if waiting_for == 'rate_about':
+            logger.info(f"[RATING] Processing about for user {user_id}")
+            await handle_rate_about(update, context)
+            return
+        
         if waiting_for == 'rate_profile':
-            from handlers.rating_handler import handle_rate_profile
             logger.info(f"[RATING] Processing profile for user {user_id}")
             await handle_rate_profile(update, context)
             return
-            
-        if waiting_for == 'rate_age':
-           from handlers.rating_handler import handle_rate_age
-           logger.info(f"[RATING] Processing age for user {user_id}")
-           await handle_rate_age(update, context)
-           return
         
         # ============= ПРИОРИТЕТ 2: GAME HANDLERS =============
         if await handle_game_text_input(update, context):
@@ -464,7 +505,6 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         logger.error(f"Error handling message from user {user_id}: {e}", exc_info=True)
         await update.message.reply_text("❌ Произошла ошибка")
-        
 
 async def error_handler(update: object, context):
     """Error handler"""
@@ -485,8 +525,8 @@ def main():
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     
-    logger.info("🚀 Starting TrixBot...")
-    print("🚀 Starting TrixBot...")
+    logger.info("🚀 Starting TrixBot v5.0...")
+    print("🚀 Starting TrixBot v5.0...")
     print(f"📊 Database: {Config.DATABASE_URL[:30]}...")
     print(f"🚫 Budapest chat: {Config.BUDAPEST_CHAT_ID}")
     
@@ -537,18 +577,25 @@ def main():
     application.add_handler(CommandHandler("broadcast", broadcast_command))
     application.add_handler(CommandHandler("sendstats", sendstats_command))
     
-        # Catalog commands - User
+    # Rating commands (TopPeople)
+    application.add_handler(CommandHandler("itsme", itsme_command))
+    application.add_handler(CommandHandler("toppeople", toppeople_command))
+    application.add_handler(CommandHandler("topboys", topboys_command))
+    application.add_handler(CommandHandler("topgirls", topgirls_command))
+    application.add_handler(CommandHandler("toppeoplereset", toppeoplereset_command))
+    
+    # Catalog commands - User
     application.add_handler(CommandHandler("catalog", catalog_command))
     application.add_handler(CommandHandler("search", search_command))
     application.add_handler(CommandHandler("addtocatalog", addtocatalog_command))
     application.add_handler(CommandHandler("review", review_command))
-    application.add_handler(CommandHandler("categoryfollow", categoryfollow_command))  # ← НОВАЯ
+    application.add_handler(CommandHandler("categoryfollow", categoryfollow_command))
     
     # Catalog commands - Admin
     application.add_handler(CommandHandler("catalogpriority", catalogpriority_command))
     application.add_handler(CommandHandler("addcatalogreklama", addcatalogreklama_command))
     application.add_handler(CommandHandler("catalogviews", catalogviews_command))
-    application.add_handler(CommandHandler("catalogview", catalogview_command))  # ← НОВАЯ
+    application.add_handler(CommandHandler("catalogview", catalogview_command))
     application.add_handler(CommandHandler("catalog_stats_users", catalog_stats_users_command))
     application.add_handler(CommandHandler("catalog_stats_categories", catalog_stats_categories_command))
     application.add_handler(CommandHandler("catalog_stats_popular", catalog_stats_popular_command))
@@ -562,6 +609,7 @@ def main():
     application.add_handler(CommandHandler("admincataloginfo", admincataloginfo_command))
     application.add_handler(CommandHandler("catalogads", catalogads_command))
     application.add_handler(CommandHandler("removeads", removeads_command))
+    
     # Stats commands
     application.add_handler(CommandHandler("channelstats", channelstats_command))
     application.add_handler(CommandHandler("fullstats", fullstats_command))
@@ -614,13 +662,6 @@ def main():
     application.add_handler(CommandHandler("edit", wordedit_command))
     application.add_handler(CommandHandler("wordclear", wordclear_command))
     
-    # Rating commands
-    application.add_handler(CommandHandler("itsme", itsme_command))
-    application.add_handler(CommandHandler("toppeople", toppeople_command))
-    application.add_handler(CommandHandler("topboys", topboys_command))
-    application.add_handler(CommandHandler("topgirls", topgirls_command))
-    application.add_handler(CommandHandler("toppeoplereset", toppeoplereset_command))
-    
     # TrixTicket admin commands
     application.add_handler(CommandHandler("givett", givett_command))
     application.add_handler(CommandHandler("removett", removett_command))
@@ -630,7 +671,7 @@ def main():
     application.add_handler(CommandHandler("ttsave", ttsave_command))
     application.add_handler(CommandHandler("trixticketclear", trixticketclear_command))
     
-    # ✅ ИСПРАВЛЕНО: Callback handler ПЕРЕД message handler
+    # ✅ КРИТИЧНО: Callback handler ПЕРЕД message handler
     application.add_handler(CallbackQueryHandler(handle_all_callbacks))
     
     # ✅ КРИТИЧНО: Message handler ПОСЛЕ callback handler
@@ -649,16 +690,17 @@ def main():
     loop.create_task(stats_scheduler.start())
     print("✅ Stats scheduler enabled")
     
-    logger.info("🤖 TrixBot starting...")
+    logger.info("🤖 TrixBot v5.0 starting...")
     print("\n" + "="*50)
-    print("🤖 TRIXBOT IS READY!")
+    print("🤖 TRIXBOT v5.0 IS READY!")
     print("="*50)
     print(f"📊 Stats interval: {Config.STATS_INTERVAL_HOURS}h")
     print(f"📢 Moderation: {Config.MODERATION_GROUP_ID}")
     print(f"🔧 Admin group: {Config.ADMIN_GROUP_ID}")
     print(f"🚫 Budapest chat (IGNORE): {Config.BUDAPEST_CHAT_ID}")
     print(f"⏰ Cooldown: {Config.COOLDOWN_SECONDS // 3600}h")
-    print(f"📸 Catalog with media: ✅ Enabled")
+    print(f"📸 Catalog v5.0: ✅ With media & TopPeople")
+    print(f"⭐ Rating v5.0: ✅ /itsme with 6 steps")
     
     if db_initialized:
         print(f"💾 Database: ✅ Connected")
@@ -699,7 +741,7 @@ def main():
         except Exception as loop_error:
             logger.error(f"Error closing loop: {loop_error}")
         
-        print("\n👋 TrixBot stopped")
+        print("\n👋 TrixBot v5.0 stopped")
 
 if __name__ == '__main__':
     main()
