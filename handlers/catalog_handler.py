@@ -1,9 +1,12 @@
 # -*- coding: utf-8 -*-
 """
-Catalog Handler - OPTIMIZED v5.2
-- Уникальные префиксы callback_data: ctc_
-- Сокращенные функции
-- Улучшенная обработка медиа
+Catalog Handler - ULTRA OPTIMIZED v8.0
+✅ Лимит 1 отзыв на 1 карточку НАВСЕГДА
+✅ Кулдаун 8 часов на ВСЕ отзывы (используя cooldown_service)
+✅ Постоянные кнопки навигации внизу
+✅ Уникальные префиксы: ctpc_ (catalog public)
+✅ Исправлен Markdown парсинг
+✅ Поддержка Instagram с UTM-параметрами
 """
 import logging
 import re
@@ -14,49 +17,91 @@ from telegram.ext import ContextTypes
 from telegram.error import TelegramError, BadRequest, Forbidden
 from config import Config
 from services.catalog_service import catalog_service, CATALOG_CATEGORIES
+from services.cooldown import cooldown_service, CooldownType
 
 logger = logging.getLogger(__name__)
 
-# ============= CALLBACK PREFIXES =============
+# ============= CALLBACK PREFIXES (УНИКАЛЬНЫЕ V8) =============
 CATALOG_CALLBACKS = {
-    'next': 'ctc_next',
-    'finish': 'ctc_finish',
-    'restart': 'ctc_restart',
-    'search': 'ctc_search',
-    'cancel_search': 'ctc_cancel_search',
-    'category': 'ctc_cat',
-    'click': 'ctc_click',
-    'add_cat': 'ctc_add_cat',
-    'rate': 'ctc_rate',
-    'cancel_review': 'ctc_cancel_review',
-    'cancel': 'ctc_cancel',
-    'cancel_top': 'ctc_cancel_top',
-    'cancel_ad': 'ctc_cancel_ad',
-    'priority_finish': 'ctc_priority_finish',
-    'priority_clear': 'ctc_priority_clear',
-    'priority_stats': 'ctc_priority_stats',
-    'ad_by_number': 'ctc_ad_by_number',
-    'ad_by_link': 'ctc_ad_by_link',
-    'follow_menu': 'ctc_follow_menu',
-    'follow_cat': 'ctc_follow_cat',
-    'my_follows': 'ctc_my_follows',
-    'unfollow': 'ctc_unfollow',
-    'unfollow_all': 'ctc_unfollow_all',
-    'subscribe_menu': 'ctc_subscribe_menu',
-    'reviews_menu': 'ctc_reviews_menu',
-    'view_reviews': 'ctc_view_reviews',
-    'write_review': 'ctc_write_review',
-    'remove_confirm': 'ctc_remove_confirm',
-    'remove_cancel': 'ctc_remove_cancel',
-    'edit': 'ctc_edit',
-    'edit_cancel': 'ctc_edit_cancel',
-    'close_menu': 'ctc_close_menu',
+    'next': 'ctpc_next',
+    'finish': 'ctpc_finish',
+    'restart': 'ctpc_restart',
+    'search': 'ctpc_search',
+    'cancel_search': 'ctpc_cancel_search',
+    'category': 'ctpc_cat',
+    'click': 'ctpc_click',
+    'add_cat': 'ctpc_add_cat',
+    'rate': 'ctpc_rate',
+    'cancel_review': 'ctpc_cancel_review',
+    'cancel': 'ctpc_cancel',
+    'cancel_top': 'ctpc_cancel_top',
+    'follow_menu': 'ctpc_follow_menu',
+    'follow_cat': 'ctpc_follow_cat',
+    'my_follows': 'ctpc_my_follows',
+    'unfollow': 'ctpc_unfollow',
+    'unfollow_all': 'ctpc_unfollow_all',
+    'reviews_menu': 'ctpc_reviews_menu',
+    'view_reviews': 'ctpc_view_reviews',
+    'write_review': 'ctpc_write_review',
+    'close_menu': 'ctpc_close_menu',
 }
+
+# ============= SETTINGS =============
+REVIEW_COOLDOWN_HOURS = 8  # 8 часов кулдаун на ВСЕ отзывы
+REVIEW_MAX_LENGTH = 500
+REVIEW_MIN_LENGTH = 3
+
+# ============= REVIEW TRACKING =============
+# Хранит информацию о том, кто и какие карточки уже оценил
+user_reviewed_posts = {}  # {user_id: set(post_ids)}
+
+def safe_markdown(text: str) -> str:
+    """Безопасное экранирование для Markdown"""
+    if not text:
+        return ""
+    
+    special_chars = ['_', '*', '[', ']', '(', ')', '~', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!']
+    result = str(text)
+    for char in special_chars:
+        result = result.replace(char, f'\\{char}')
+    
+    return result
+
+def check_user_reviewed_post(user_id: int, post_id: int) -> bool:
+    """
+    Проверка: оставлял ли пользователь отзыв на эту карточку
+    Returns: True если уже оставлял
+    """
+    if user_id not in user_reviewed_posts:
+        return False
+    
+    return post_id in user_reviewed_posts[user_id]
+
+def mark_post_as_reviewed(user_id: int, post_id: int):
+    """Отметить что пользователь оставил отзыв на карточку"""
+    if user_id not in user_reviewed_posts:
+        user_reviewed_posts[user_id] = set()
+    
+    user_reviewed_posts[user_id].add(post_id)
+    logger.info(f"User {user_id} marked as reviewed post {post_id}")
+
+# ============= NAVIGATION KEYBOARD =============
+
+def get_navigation_keyboard() -> InlineKeyboardMarkup:
+    """Получить постоянную клавиатуру навигации"""
+    keyboard = [
+        [
+            InlineKeyboardButton("🔀 Следующие 5", callback_data=CATALOG_CALLBACKS['next']),
+            InlineKeyboardButton("⏹️ Завершить", callback_data=CATALOG_CALLBACKS['finish'])
+        ],
+        [InlineKeyboardButton("🔍 Поиск", callback_data=CATALOG_CALLBACKS['search'])]
+    ]
+    return InlineKeyboardMarkup(keyboard)
 
 # ============= MEDIA EXTRACTION =============
 
 async def extract_media_from_link(bot: Bot, telegram_link: str) -> Optional[Dict]:
-    """Extract media from Telegram post - OPTIMIZED"""
+    """Извлечение медиа из Telegram поста"""
     try:
         if not telegram_link or 't.me/' not in telegram_link:
             return {'success': False, 'message': '❌ Неверная ссылка'}
@@ -68,7 +113,6 @@ async def extract_media_from_link(bot: Bot, telegram_link: str) -> Optional[Dict
         channel_username = match.group(1).lstrip('@')
         message_id = int(match.group(2))
         
-        # Determine chat_id
         if channel_username.startswith('-'):
             chat_id = int(channel_username)
         elif channel_username.isdigit():
@@ -78,20 +122,15 @@ async def extract_media_from_link(bot: Bot, telegram_link: str) -> Optional[Dict
         
         logger.info(f"📥 Extracting from: {chat_id}/{message_id}")
         
-        # Check bot access
         try:
             await bot.get_chat(chat_id)
         except (Forbidden, BadRequest) as e:
             logger.error(f"❌ No access: {e}")
             return {
                 'success': False,
-                'message': '❌ Бот не имеет доступа к каналу\n\n'
-                          '1. Добавьте @TrixLiveBot в канал\n'
-                          '2. Дайте права администратора\n'
-                          '3. Или загрузите медиа вручную'
+                'message': '❌ Бот не имеет доступа к каналу'
             }
         
-        # Forward to temp chat
         try:
             forwarded = await bot.forward_message(
                 chat_id=Config.MODERATION_GROUP_ID,
@@ -122,11 +161,9 @@ async def extract_media_from_link(bot: Bot, telegram_link: str) -> Optional[Dict
             if not result:
                 result = {
                     'success': False,
-                    'message': '⚠️ Медиа не найдено в посте\n'
-                              'Вы можете загрузить медиа вручную'
+                    'message': '⚠️ Медиа не найдено в посте'
                 }
             
-            # Cleanup
             try:
                 await bot.delete_message(
                     chat_id=Config.MODERATION_GROUP_ID,
@@ -141,8 +178,7 @@ async def extract_media_from_link(bot: Bot, telegram_link: str) -> Optional[Dict
             logger.error(f"❌ Forward failed: {e}")
             return {
                 'success': False,
-                'message': '❌ Не удалось импортировать медиа\n'
-                          'Загрузите медиа вручную'
+                'message': '❌ Не удалось импортировать медиа'
             }
             
     except Exception as e:
@@ -152,18 +188,16 @@ async def extract_media_from_link(bot: Bot, telegram_link: str) -> Optional[Dict
 # ============= SEND POST WITH MEDIA =============
 
 async def send_catalog_post(bot: Bot, chat_id: int, post: Dict, index: int, total: int) -> bool:
-    """Send catalog card - OPTIMIZED"""
+    """Отправка карточки каталога"""
     try:
         catalog_number = post.get('catalog_number', '????')
         
-        # Build card text
         card_text = (
-            f"#️⃣ **Пост {catalog_number}**\n\n"
+            f"#️⃣ Пост {catalog_number}\n\n"
             f"📂 {post.get('category', 'Не указана')}\n"
             f"ℹ️ {post.get('name', 'Без названия')}\n\n"
         )
         
-        # Add tags
         tags = post.get('tags', [])
         if tags and isinstance(tags, list):
             pattern = r'[^\w\-]'
@@ -175,29 +209,23 @@ async def send_catalog_post(bot: Bot, chat_id: int, post: Dict, index: int, tota
             if clean_tags:
                 card_text += f"Теги: {' '.join(clean_tags)}\n"
         
-        # Add rating
         review_count = post.get('review_count', 0)
         if review_count >= 10:
             rating = post.get('rating', 0)
             stars = "⭐" * int(rating)
-            card_text += f"**Rating**: {stars} {rating:.1f} ({review_count} отзывов)\n"
+            card_text += f"Rating: {stars} {rating:.1f} ({review_count} отзывов)\n"
         else:
-            card_text += "**Rating**: -\n"
+            card_text += "Rating: -\n"
         
-        # Build keyboard
         keyboard = [
             [
-                InlineKeyboardButton("➡️ Перейти", url=post.get('catalog_link', '#'), 
-                                   callback_data=f"{CATALOG_CALLBACKS['click']}:{post.get('id')}"),
+                InlineKeyboardButton("➡️ Перейти", url=post.get('catalog_link', '#')),
                 InlineKeyboardButton("🧑‍🧒‍🧒 Отзывы", 
                                    callback_data=f"{CATALOG_CALLBACKS['reviews_menu']}:{post.get('id')}")
-            ],
-            [InlineKeyboardButton("🆕 Подписаться", 
-                                callback_data=f"{CATALOG_CALLBACKS['subscribe_menu']}:{post.get('category')}")]
+            ]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         
-        # Send with media if available
         media_type = post.get('media_type')
         media_file_id = post.get('media_file_id')
         
@@ -216,20 +244,17 @@ async def send_catalog_post(bot: Bot, chat_id: int, post: Dict, index: int, tota
                         chat_id=chat_id,
                         **{media_type: media_file_id},
                         caption=card_text,
-                        reply_markup=reply_markup,
-                        parse_mode='Markdown'
+                        reply_markup=reply_markup
                     )
                     await catalog_service.increment_views(post.get('id'), chat_id)
                     return True
                 except TelegramError:
                     pass
         
-        # Fallback to text
         await bot.send_message(
             chat_id=chat_id,
             text=card_text,
             reply_markup=reply_markup,
-            parse_mode='Markdown',
             disable_web_page_preview=True
         )
         await catalog_service.increment_views(post.get('id'), chat_id)
@@ -242,7 +267,7 @@ async def send_catalog_post(bot: Bot, chat_id: int, post: Dict, index: int, tota
 # ============= COMMANDS =============
 
 async def catalog_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Browse catalog - /catalog"""
+    """Просмотр каталога - /catalog"""
     user_id = update.effective_user.id
     posts = await catalog_service.get_random_posts_mixed(user_id, count=5)
     
@@ -260,26 +285,20 @@ async def catalog_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     for i, post in enumerate(posts, 1):
         await send_catalog_post(context.bot, update.effective_chat.id, post, i, len(posts))
     
-    keyboard = [
-        [
-            InlineKeyboardButton("🔀 Следующие 5", callback_data=CATALOG_CALLBACKS['next']),
-            InlineKeyboardButton("⏹️ Закончить", callback_data=CATALOG_CALLBACKS['finish'])
-        ],
-        [InlineKeyboardButton("🔍 Поиск", callback_data=CATALOG_CALLBACKS['search'])]
-    ]
+    # ПОСТОЯННАЯ НАВИГАЦИЯ ВНИЗУ
     await update.message.reply_text(
         f"🔃 Показано: {len(posts)}",
-        reply_markup=InlineKeyboardMarkup(keyboard)
+        reply_markup=get_navigation_keyboard()
     )
 
 async def search_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Search catalog - /search"""
+    """Поиск в каталоге - /search"""
     context.user_data['catalog_search'] = {'step': 'query'}
     
     keyboard = [[InlineKeyboardButton("🚫 Отмена", callback_data=CATALOG_CALLBACKS['cancel_search'])]]
     
     await update.message.reply_text(
-        "🔎 **ПОИСК В КАТАЛОГЕ**\n\n"
+        "🔎 *ПОИСК В КАТАЛОГЕ*\n\n"
         "Введите слова для поиска:\n"
         "• По названию\n"
         "• По тегам\n\n"
@@ -289,7 +308,9 @@ async def search_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def review_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Leave review - /review [id]"""
+    """Оставить отзыв - /review [id]"""
+    user_id = update.effective_user.id
+    
     if not context.args or not context.args[0].isdigit():
         await update.message.reply_text(
             "🔄 Использование: `/review [номер]`\n\n"
@@ -305,8 +326,33 @@ async def review_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"❌ Пост #{catalog_number} не найден")
         return
     
+    post_id = post['id']
+    
+    # ПРОВЕРКА 1: Уже оставлял отзыв на ЭТУ карточку?
+    if check_user_reviewed_post(user_id, post_id):
+        await update.message.reply_text(
+            f"❌ Вы уже оставили отзыв на пост #{catalog_number}"
+        )
+        return
+    
+    # ПРОВЕРКА 2: Кулдаун 8 часов на ВСЕ отзывы
+    can_review, remaining = await cooldown_service.check_cooldown(
+        user_id=user_id,
+        command='review',
+        duration=REVIEW_COOLDOWN_HOURS * 3600,
+        cooldown_type=CooldownType.NORMAL
+    )
+    
+    if not can_review:
+        hours = remaining // 3600
+        minutes = (remaining % 3600) // 60
+        await update.message.reply_text(
+            f"⏳ Вы можете оставить отзыв через {hours}ч {minutes}мин"
+        )
+        return
+    
     context.user_data['catalog_review'] = {
-        'post_id': post['id'],
+        'post_id': post_id,
         'catalog_number': catalog_number,
         'step': 'rating'
     }
@@ -325,21 +371,21 @@ async def review_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
     
     await update.message.reply_text(
-        f"🌟 **ОЦЕНКА ПОСТА #{catalog_number}**\n\n"
-        f"📝 {post.get('name', 'Без названия')}\n\n"
+        f"🌟 *ОЦЕНКА ПОСТА \\#{catalog_number}*\n\n"
+        f"📝 {safe_markdown(post.get('name', 'Без названия'))}\n\n"
         "Выберите оценку:",
         reply_markup=InlineKeyboardMarkup(keyboard),
-        parse_mode='Markdown'
+        parse_mode='MarkdownV2'
     )
 
 async def categoryfollow_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Manage subscriptions - /categoryfollow"""
+    """Управление подписками - /categoryfollow"""
     user_id = update.effective_user.id
     
     try:
         subscriptions = await catalog_service.get_user_subscriptions(user_id)
         
-        text = "🔔 **ПОДПИСКИ НА КАТЕГОРИИ**\n\n"
+        text = "🔔 *ПОДПИСКИ НА КАТЕГОРИИ*\n\n"
         
         if subscriptions:
             text += "☑️ Ваши подписки:\n"
@@ -365,51 +411,49 @@ async def categoryfollow_command(update: Update, context: ContextTypes.DEFAULT_T
         await update.message.reply_text("❌ Ошибка при загрузке подписок")
 
 async def addtocatalog_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Add to catalog - /addtocatalog"""
+    """Добавить в каталог - /addtocatalog"""
     if not Config.is_admin(update.effective_user.id):
         await update.message.reply_text("❌ Команда только для администраторов")
         return
     
     context.user_data['catalog_add'] = {'step': 'link'}
-    keyboard = [[InlineKeyboardButton("🚗 Отмена", callback_data=CATALOG_CALLBACKS['cancel'])]]
+    keyboard = [[InlineKeyboardButton("🚫 Отмена", callback_data=CATALOG_CALLBACKS['cancel'])]]
     
     await update.message.reply_text(
-        "🛤️ **ДОБАВЛЕНИЕ**\n\nШаг 1/5\n\n"
-        "🫟 Ссылка на пост:\n"
+        "🛤️ *ДОБАВЛЕНИЕ В КАТАЛОГ*\n\nШаг 1/5\n\n"
+        "🔗 Ссылка на пост:\n"
         "Пример: https://t.me/channel/123",
         reply_markup=InlineKeyboardMarkup(keyboard),
         parse_mode='Markdown'
     )
 
-# ============= ADMIN COMMANDS (SHORTENED) =============
-
 async def addgirltocat_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Add to TopGirls - /addgirltocat"""
+    """Добавить в TopGirls - /addgirltocat"""
     if not Config.is_admin(update.effective_user.id):
         await update.message.reply_text("❌ Только для админов")
         return
     
     context.user_data['catalog_add_top'] = {'step': 'link', 'category': '👱🏻‍♀️ TopGirls'}
-    keyboard = [[InlineKeyboardButton("🚗 Отмена", callback_data=CATALOG_CALLBACKS['cancel_top'])]]
+    keyboard = [[InlineKeyboardButton("🚫 Отмена", callback_data=CATALOG_CALLBACKS['cancel_top'])]]
     
     await update.message.reply_text(
-        "💃 **ДОБАВЛЕНИЕ В TOPGIRLS**\n\nШаг 1/3\n\n"
+        "💃 *ДОБАВЛЕНИЕ В TOPGIRLS*\n\nШаг 1/3\n\n"
         "👩🏼‍💼 Ссылка на оригинальный пост:",
         reply_markup=InlineKeyboardMarkup(keyboard),
         parse_mode='Markdown'
     )
 
 async def addboytocat_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Add to TopBoys - /addboytocat"""
+    """Добавить в TopBoys - /addboytocat"""
     if not Config.is_admin(update.effective_user.id):
         await update.message.reply_text("❌ Только для админов")
         return
     
     context.user_data['catalog_add_top'] = {'step': 'link', 'category': '🤵🏼‍♂️ TopBoys'}
-    keyboard = [[InlineKeyboardButton("🚗 Отмена", callback_data=CATALOG_CALLBACKS['cancel_top'])]]
+    keyboard = [[InlineKeyboardButton("🚫 Отмена", callback_data=CATALOG_CALLBACKS['cancel_top'])]]
     
     await update.message.reply_text(
-        "🤵 **ДОБАВЛЕНИЕ В TOPBOYS**\n\nШаг 1/3\n\n"
+        "🤵 *ДОБАВЛЕНИЕ В TOPBOYS*\n\nШаг 1/3\n\n"
         "🧏🏻‍♂️ Ссылка на оригинальный пост:",
         reply_markup=InlineKeyboardMarkup(keyboard),
         parse_mode='Markdown'
@@ -418,7 +462,7 @@ async def addboytocat_command(update: Update, context: ContextTypes.DEFAULT_TYPE
 # ============= MEDIA HANDLER =============
 
 async def handle_catalog_media(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
-    """Handle media upload - OPTIMIZED"""
+    """Обработка загрузки медиа"""
     if 'catalog_add' not in context.user_data or context.user_data['catalog_add'].get('step') != 'media':
         return False
     
@@ -453,15 +497,14 @@ async def handle_catalog_media(update: Update, context: ContextTypes.DEFAULT_TYP
 # ============= CALLBACK HANDLER =============
 
 async def handle_catalog_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle all catalog callbacks - OPTIMIZED"""
+    """Обработка всех callback каталога"""
     query = update.callback_query
     await query.answer()
     
     data_parts = query.data.split(":")
     
-    # Remove prefix
-    if data_parts[0].startswith('ctc_'):
-        action = data_parts[0][4:]
+    if data_parts[0].startswith('ctpc_'):
+        action = data_parts[0][5:]
     else:
         action = data_parts[0]
     
@@ -507,7 +550,7 @@ async def handle_catalog_callback(update: Update, context: ContextTypes.DEFAULT_
         context.user_data['catalog_search'] = {'step': 'query'}
         keyboard = [[InlineKeyboardButton("🚫 Отмена", callback_data=CATALOG_CALLBACKS['cancel_search'])]]
         await safe_edit(
-            "🔍 **ПОИСК**\n\nВведите слова для поиска:",
+            "🔍 *ПОИСК*\n\nВведите слова для поиска:",
             InlineKeyboardMarkup(keyboard)
         )
     
@@ -536,8 +579,8 @@ async def handle_catalog_callback(update: Update, context: ContextTypes.DEFAULT_
         
         await safe_edit(
             f"✅ Оценка: {stars}\n\n"
-            f"📝 Пост #{catalog_number}\n\n"
-            f"Теперь напишите текст отзыва (макс. 500 символов):",
+            f"📝 Пост \\#{catalog_number}\n\n"
+            f"Теперь напишите текст отзыва \\({REVIEW_MIN_LENGTH}\\-{REVIEW_MAX_LENGTH} символов\\):",
             InlineKeyboardMarkup(keyboard)
         )
     
@@ -562,15 +605,17 @@ async def handle_catalog_callback(update: Update, context: ContextTypes.DEFAULT_
         context.user_data['catalog_add']['category'] = category
         context.user_data['catalog_add']['step'] = 'name'
         
+        safe_category = safe_markdown(category)
+        
         await safe_edit(
-            f"✅ Категория: {category}\n\n"
-            f"📝 Шаг 3/5\n\nНазвание (макс. 255 символов):"
+            f"✅ Категория: {safe_category}\n\n"
+            f"📝 Шаг 3/5\n\nНазвание \\(макс\\. 255 символов\\):"
         )
 
 # ============= TEXT HANDLER =============
 
 async def handle_catalog_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle text input - OPTIMIZED"""
+    """Обработка текстового ввода"""
     user_id = update.effective_user.id
     text = update.message.text
     
@@ -588,10 +633,10 @@ async def handle_catalog_text(update: Update, context: ContextTypes.DEFAULT_TYPE
             for i, post in enumerate(posts, 1):
                 await send_catalog_post(context.bot, update.effective_chat.id, post, i, len(posts))
             
-            keyboard = [[InlineKeyboardButton("✅ Готово", callback_data=CATALOG_CALLBACKS['finish'])]]
+            # ПОСТОЯННАЯ НАВИГАЦИЯ
             await update.message.reply_text(
-                f"🔍 Найдено: {len(posts)}",
-                reply_markup=InlineKeyboardMarkup(keyboard)
+                f"🔍 Найдено: {len(posts)} постов",
+                reply_markup=get_navigation_keyboard()
             )
         else:
             await update.message.reply_text("❌ Ничего не найдено")
@@ -604,14 +649,23 @@ async def handle_catalog_text(update: Update, context: ContextTypes.DEFAULT_TYPE
         data = context.user_data['catalog_review']
         
         if data.get('step') == 'text':
-            review_text = text.strip()[:500]
+            review_text = text.strip()[:REVIEW_MAX_LENGTH]
             
-            if len(review_text) < 3:
-                await update.message.reply_text("❌ Отзыв слишком короткий")
+            if len(review_text) < REVIEW_MIN_LENGTH:
+                await update.message.reply_text(f"❌ Отзыв слишком короткий (минимум {REVIEW_MIN_LENGTH} символа)")
                 return
             
+            post_id = data.get('post_id')
+            
+            # Проверка что не оставлял отзыв на эту карточку
+            if check_user_reviewed_post(user_id, post_id):
+                await update.message.reply_text("❌ Вы уже оставили отзыв на эту карточку")
+                context.user_data.pop('catalog_review', None)
+                return
+            
+            # Добавляем отзыв
             review_id = await catalog_service.add_review(
-                post_id=data.get('post_id'),
+                post_id=post_id,
                 user_id=user_id,
                 review_text=review_text,
                 rating=data.get('rating', 5),
@@ -620,13 +674,27 @@ async def handle_catalog_text(update: Update, context: ContextTypes.DEFAULT_TYPE
             )
             
             if review_id:
+                # ОТМЕЧАЕМ что пользователь оставил отзыв на эту карточку
+                mark_post_as_reviewed(user_id, post_id)
+                
+                # УСТАНАВЛИВАЕМ КУЛДАУН 8 часов на ВСЕ отзывы
+                await cooldown_service.set_cooldown(
+                    user_id=user_id,
+                    command='review',
+                    duration=REVIEW_COOLDOWN_HOURS * 3600,
+                    cooldown_type=CooldownType.NORMAL
+                )
+                
                 await update.message.reply_text(
                     f"✅ Отзыв сохранён!\n\n"
                     f"#{data.get('catalog_number')}\n"
-                    f"Спасибо за ваш отзыв!"
+                    f"Спасибо за ваш отзыв!\n\n"
+                    f"⏳ Следующий отзыв можно оставить через {REVIEW_COOLDOWN_HOURS}ч"
                 )
+                
+                logger.info(f"User {user_id} left review on post {post_id} with {REVIEW_COOLDOWN_HOURS}h cooldown")
             else:
-                await update.message.reply_text("❌ Ошибка")
+                await update.message.reply_text("❌ Ошибка при сохранении отзыва")
             
             context.user_data.pop('catalog_review', None)
             return
@@ -662,16 +730,18 @@ async def handle_catalog_text(update: Update, context: ContextTypes.DEFAULT_TYPE
                     reply_markup=InlineKeyboardMarkup(keyboard)
                 )
             else:
-                await update.message.reply_text("❌ Ссылка должна начинаться с https://t.me/")
+                await update.message.reply_text("❌ Ссылка должна начинаться с https://t\\.me/", parse_mode='Markdown')
         
         elif step == 'name':
             data['name'] = text[:255]
             
             if data.get('media_file_id'):
                 data['step'] = 'tags'
+                safe_text = safe_markdown(text[:50])
                 await update.message.reply_text(
-                    f"✅ Название: {text[:50]}\n\n"
-                    f"#️⃣ Шаг 4/4\n\nТеги через запятую:"
+                    f"✅ Название: {safe_text}\n\n"
+                    f"#️⃣ Шаг 4/4\n\nТеги через запятую:",
+                    parse_mode='MarkdownV2'
                 )
             else:
                 data['step'] = 'media'
@@ -708,7 +778,7 @@ async def handle_catalog_text(update: Update, context: ContextTypes.DEFAULT_TYPE
                     f"🏷️ {len(tags)} тегов"
                 )
             else:
-                await update.message.reply_text("❌ Ошибка")
+                await update.message.reply_text("❌ Ошибка при добавлении")
             
             context.user_data.pop('catalog_add', None)
         
