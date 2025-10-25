@@ -354,9 +354,8 @@ async def handle_all_callbacks(update: Update, context):
         except:
             pass
 
-
 async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Main message handler - С ПОДДЕРЖКОЙ МЕДИА КАТАЛОГА"""
+    """Main message handler - С ПРАВИЛЬНЫМ ПРИОРИТЕТОМ ОБРАБОТКИ"""
     user_id = update.effective_user.id
     chat_id = update.effective_chat.id
     
@@ -378,75 +377,87 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
     waiting_for = context.user_data.get('waiting_for')
     
     try:
-        # Check for game input
-        if await handle_game_text_input(update, context):
-            return
+        # ============= ПРИОРИТЕТ 1: RATING HANDLERS (САМЫЙ ВЫСОКИЙ!) =============
+        # КРИТИЧНО: Проверяем rating ПЕРЕД всеми остальными медиа-обработчиками
+        # Иначе catalog перехватит фото для /itsme
         
-        if await handle_game_media_input(update, context):
-            return
-        
-        # Moderation text - проверяем еще раз для надежности
-        if context.user_data.get('mod_waiting_for'):
-            await handle_moderation_text(update, context)
-            return
-        
-        # Piar form
-        if waiting_for and waiting_for.startswith('piar_'):
-            if update.message.photo or update.message.video:
-                await handle_piar_photo(update, context)
-            else:
-                field = waiting_for.replace('piar_', '')
-                text = update.message.text or update.message.caption
-                await handle_piar_text(update, context, field, text)
-            return
-        
-        # ============= НОВОЕ: КАТАЛОГ С МЕДИА =============
-        # Проверяем медиа для каталога (ПРИОРИТЕТ)
-        if (update.message.photo or update.message.video or 
-            update.message.animation or update.message.document):
-            
-            # Пробуем обработать как медиа для каталога
-            if await handle_catalog_media(update, context):
-                logger.info(f"Media handled by catalog for user {user_id}")
-                return
-        
-        # Каталог text handler
-        if ('catalog_add' in context.user_data or 
-            'catalog_review' in context.user_data or
-            'catalog_priority' in context.user_data or
-            'catalog_ad' in context.user_data):
-            await handle_catalog_text(update, context)
-            return
-        # ============= КОНЕЦ НОВОГО БЛОКА =============
-        
-        # Rating handlers
         if waiting_for == 'rate_photo':
             from handlers.rating_handler import handle_rate_photo
+            logger.info(f"[RATING] Processing photo for user {user_id}")
             await handle_rate_photo(update, context)
             return
         
         if waiting_for == 'rate_profile':
             from handlers.rating_handler import handle_rate_profile
+            logger.info(f"[RATING] Processing profile for user {user_id}")
             await handle_rate_profile(update, context)
             return
             
         if waiting_for == 'rate_age':
            from handlers.rating_handler import handle_rate_age
+           logger.info(f"[RATING] Processing age for user {user_id}")
            await handle_rate_age(update, context)
            return
+        
+        # ============= ПРИОРИТЕТ 2: GAME HANDLERS =============
+        if await handle_game_text_input(update, context):
+            logger.info(f"[GAME] Text processed for user {user_id}")
+            return
+        
+        if await handle_game_media_input(update, context):
+            logger.info(f"[GAME] Media processed for user {user_id}")
+            return
+        
+        # ============= ПРИОРИТЕТ 3: PIAR HANDLERS =============
+        if waiting_for and waiting_for.startswith('piar_'):
+            if update.message.photo or update.message.video:
+                logger.info(f"[PIAR] Processing photo for user {user_id}")
+                await handle_piar_photo(update, context)
+            else:
+                field = waiting_for.replace('piar_', '')
+                text = update.message.text or update.message.caption
+                logger.info(f"[PIAR] Processing text field '{field}' for user {user_id}")
+                await handle_piar_text(update, context, field, text)
+            return
+        
+        # ============= ПРИОРИТЕТ 4: CATALOG HANDLERS =============
+        # Проверяем медиа для каталога (ТОЛЬКО если есть активная сессия каталога)
+        if (update.message.photo or update.message.video or 
+            update.message.animation or update.message.document):
+            
+            # Проверяем есть ли активная сессия добавления в каталог
+            if 'catalog_add' in context.user_data and context.user_data['catalog_add'].get('step') == 'media':
+                logger.info(f"[CATALOG] Processing media for user {user_id}")
+                if await handle_catalog_media(update, context):
+                    return
+        
+        # Каталог text handler
+        if ('catalog_add' in context.user_data or 
+            'catalog_review' in context.user_data or
+            'catalog_priority' in context.user_data or
+            'catalog_ad' in context.user_data or
+            'catalog_search' in context.user_data):
+            logger.info(f"[CATALOG] Processing text for user {user_id}")
+            await handle_catalog_text(update, context)
+            return
+        
+        # ============= ПРИОРИТЕТ 5: PUBLICATION HANDLERS =============
         # Media for posts
         if update.message.photo or update.message.video or update.message.document:
+            logger.info(f"[PUBLICATION] Processing media for user {user_id}")
             await handle_media_input(update, context)
             return
         
         # Text for posts
         if waiting_for == 'post_text' or context.user_data.get('post_data'):
+            logger.info(f"[PUBLICATION] Processing text for user {user_id}")
             await handle_text_input(update, context)
             return
         
     except Exception as e:
-        logger.error(f"Error handling message: {e}", exc_info=True)
+        logger.error(f"Error handling message from user {user_id}: {e}", exc_info=True)
         await update.message.reply_text("❌ Произошла ошибка")
+        
 
 async def error_handler(update: object, context):
     """Error handler"""
