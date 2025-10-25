@@ -1,5 +1,5 @@
-# handlers/__init__.py - OPTIMIZED v5.4
-# Объединены: social, bonus, links, medicine -> info_handler
+# handlers/__init__.py - OPTIMIZED v5.5
+# Unified: social, bonus, links, medicine -> info_handler (prefix: ifc_)
 
 from .start_handler import start_command, help_command, show_main_menu, show_write_menu
 from .menu_handler import handle_menu_callback
@@ -41,7 +41,7 @@ from .autopost_handler import (
     autopost_test_command
 )
 
-# ============= INFO (SOCIAL, BONUS, LINKS, MEDICINE) =============
+# ============= INFO (UNIFIED: SOCIAL, BONUS, LINKS, MEDICINE) =============
 from .info_handler import (
     social_command,
     bonus_command,
@@ -178,7 +178,7 @@ __all__ = [
     'autopost_command',
     'autopost_test_command',
     
-    # Info (Social, Bonus, Links, Medicine)
+    # Info (Unified: Social, Bonus, Links, Medicine)
     'social_command',
     'bonus_command',
     'trixlinks_command',
