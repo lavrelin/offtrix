@@ -1,4 +1,5 @@
-# handlers/__init__.py - ВЕРСИЯ 5.0 С CATALOG_SERVICE v5.0
+# handlers/__init__.py - OPTIMIZED v5.2
+# Без profile_handler и help_commands
 
 from .start_handler import start_command, help_command, show_main_menu, show_write_menu
 from .menu_handler import handle_menu_callback
@@ -24,11 +25,8 @@ from .moderation_handler import (
     top_command,
     lastseen_command
 )
-from .profile_handler import handle_profile_callback
 from .basic_handler import (
     id_command, 
-    whois_command, 
-    join_command, 
     participants_command, 
     report_command
 )
@@ -55,8 +53,8 @@ from .autopost_handler import (
     autopost_test_command
 )
 
-# ============= RATING (TOPPEOPLE) - ВЕРСИЯ 5.0 =============
-from .rating_handler import (
+# ============= RATING (TOPPEOPLE) - OPTIMIZED v5.2 =============
+from .rating_handler_optimized import (
     itsme_command,
     toppeople_command,
     topboys_command,
@@ -68,46 +66,28 @@ from .rating_handler import (
     handle_rate_age,
     handle_rate_name,
     handle_rate_about,
-    handle_rate_profile
+    handle_rate_profile,
+    RATING_CALLBACKS,
+    RATING_MOD_CALLBACKS,
 )
 
-# ============= КАТАЛОГ - ВЕРСИЯ 5.0 =============
-from .catalog_handler import (
-    # Основные команды
+# ============= CATALOG - OPTIMIZED v5.2 =============
+from .catalog_handler_optimized import (
     catalog_command,
     search_command,
     addtocatalog_command,
     review_command,
     categoryfollow_command,
-    
-    # Админские команды
-    catalogpriority_command,
-    addcatalogreklama_command,
-    edit_catalog_command,
-    remove_catalog_command,
-    change_catalog_number_command,
     addgirltocat_command,
     addboytocat_command,
-    
-    # Статистика
-    catalogview_command,
-    catalogviews_command,
-    catalog_stats_users_command,
-    catalog_stats_categories_command,
-    catalog_stats_popular_command,
-    catalog_stats_priority_command,
-    catalog_stats_reklama_command,
-    admincataloginfo_command,
-    catalogads_command,
-    removeads_command,
-    
-    # Handlers
     handle_catalog_callback,
     handle_catalog_text,
-    handle_catalog_media
+    handle_catalog_media,
+    CATALOG_CALLBACKS,
 )
 
-from .games_handler import (
+# ============= GAMES - OPTIMIZED v5.2 =============
+from .games_handler_optimized import (
     wordadd_command, 
     wordedit_command, 
     wordclear_command,
@@ -126,8 +106,10 @@ from .games_handler import (
     mynumber_command,
     handle_game_text_input,
     handle_game_media_input,
-    handle_game_callback
+    handle_game_callback,
+    GAME_CALLBACKS,
 )
+
 from .medicine_handler import hp_command, handle_hp_callback
 from .stats_commands import (
     channelstats_command,
@@ -135,14 +117,17 @@ from .stats_commands import (
     resetmsgcount_command,
     chatinfo_command
 )
-from .help_commands import trix_command, handle_trix_callback
 from .social_handler import social_command, giveaway_command
 from .bonus_handler import bonus_command
-from .giveaway_handler import (
+
+# ============= GIVEAWAY - OPTIMIZED v5.2 =============
+from .giveaway_handler_optimized import (
     giveaway_command,
     handle_giveaway_callback,
-    p2p_command
+    p2p_command,
+    GIVEAWAY_CALLBACKS,
 )
+
 from .trixticket_handler import (
     tickets_command,
     myticket_command,
@@ -189,13 +174,8 @@ __all__ = [
     'top_command',
     'lastseen_command',
     
-    # Profile
-    'handle_profile_callback',
-    
     # Basic
     'id_command',
-    'whois_command',
-    'join_command',
     'participants_command',
     'report_command',
     
@@ -223,7 +203,7 @@ __all__ = [
     'autopost_command',
     'autopost_test_command',
     
-    # Rating (TopPeople) - v5.0
+    # Rating (TopPeople) - OPTIMIZED v5.2
     'itsme_command',
     'toppeople_command',
     'topboys_command',
@@ -236,35 +216,23 @@ __all__ = [
     'handle_rate_name',
     'handle_rate_about',
     'handle_rate_profile',
+    'RATING_CALLBACKS',
+    'RATING_MOD_CALLBACKS',
     
-    # Catalog - v5.0
+    # Catalog - OPTIMIZED v5.2
     'catalog_command',
     'search_command',
     'addtocatalog_command',
     'review_command',
     'categoryfollow_command',
-    'catalogpriority_command',
-    'addcatalogreklama_command',
-    'edit_catalog_command',
-    'remove_catalog_command',
-    'change_catalog_number_command',
     'addgirltocat_command',
     'addboytocat_command',
-    'catalogview_command',
-    'catalogviews_command',
-    'catalog_stats_users_command',
-    'catalog_stats_categories_command',
-    'catalog_stats_popular_command',
-    'catalog_stats_priority_command',
-    'catalog_stats_reklama_command',
-    'admincataloginfo_command',
-    'catalogads_command',
-    'removeads_command',
     'handle_catalog_callback',
     'handle_catalog_text',
     'handle_catalog_media',
+    'CATALOG_CALLBACKS',
     
-    # Games
+    # Games - OPTIMIZED v5.2
     'wordadd_command',
     'wordedit_command',
     'wordclear_command',
@@ -284,6 +252,7 @@ __all__ = [
     'handle_game_text_input',
     'handle_game_media_input',
     'handle_game_callback',
+    'GAME_CALLBACKS',
     
     # Medicine
     'hp_command',
@@ -295,10 +264,6 @@ __all__ = [
     'resetmsgcount_command',
     'chatinfo_command',
     
-    # Help
-    'trix_command',
-    'handle_trix_callback',
-    
     # Social
     'social_command',
     'giveaway_command',
@@ -306,9 +271,10 @@ __all__ = [
     # Bonus
     'bonus_command',
     
-    # Giveaway
+    # Giveaway - OPTIMIZED v5.2
     'handle_giveaway_callback',
     'p2p_command',
+    'GIVEAWAY_CALLBACKS',
     
     # TrixTicket
     'tickets_command',
