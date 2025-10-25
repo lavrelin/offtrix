@@ -30,7 +30,8 @@ from handlers.rating_handler import (
     itsme_command, toppeople_command, topboys_command, 
     topgirls_command, toppeoplereset_command, handle_rate_callback,
     handle_rate_moderation_callback,
-    handle_rate_photo,    # ← ДОБАВЬТЕ
+    handle_rate_photo,
+    handle_rate_age, ← ДОБАВЬТЕ
     handle_rate_profile   # ← ДОБАВЬТЕ
 )
 from handlers.profile_handler import handle_profile_callback
@@ -425,6 +426,11 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
             from handlers.rating_handler import handle_rate_profile
             await handle_rate_profile(update, context)
             return
+            
+        if waiting_for == 'rate_age':
+       from handlers.rating_handler import handle_rate_age
+       await handle_rate_age(update, context)
+       return
         
         # Media for posts
         if update.message.photo or update.message.video or update.message.document:
@@ -533,6 +539,7 @@ def main():
     application.add_handler(CommandHandler("changenumber", change_catalog_number_command))
     application.add_handler(CommandHandler("addgirltocat", addgirltocat_command))
     application.add_handler(CommandHandler("addboytocat", addboytocat_command))
+    application.add_handler(CommandHandler("admincataloginfo", admincataloginfo_command))
     # Stats commands
     application.add_handler(CommandHandler("channelstats", channelstats_command))
     application.add_handler(CommandHandler("fullstats", fullstats_command))
