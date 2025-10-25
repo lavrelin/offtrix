@@ -61,6 +61,7 @@ from handlers.giveaway_handler import (
 # ============= ОСТАЛЬНЫЕ HANDLERS =============
 from handlers.info_handler import (
     social_command, bonus_command, trixlinks_command, hp_command, handle_info_callback
+)
 from handlers.autopost_handler import autopost_command, autopost_test_command
 from handlers.trixticket_handler import (
     tickets_command, myticket_command, trixtickets_command,
