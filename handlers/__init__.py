@@ -1,6 +1,5 @@
-# handlers/__init__.py - OPTIMIZED v5.3
-# Удалены: basic_handler, advanced_moderation, stats_commands
-# Добавлены: id_command, report_command, silence_command из admin_handler
+# handlers/__init__.py - OPTIMIZED v5.4
+# Объединены: social, bonus, links, medicine -> info_handler
 
 from .start_handler import start_command, help_command, show_main_menu, show_write_menu
 from .menu_handler import handle_menu_callback
@@ -26,7 +25,6 @@ from .moderation_handler import (
     top_command,
     lastseen_command
 )
-from .link_handler import trixlinks_command
 from .admin_handler import (
     admin_command, 
     talkto_command,
@@ -41,6 +39,16 @@ from .admin_handler import (
 from .autopost_handler import (
     autopost_command, 
     autopost_test_command
+)
+
+# ============= INFO (SOCIAL, BONUS, LINKS, MEDICINE) =============
+from .info_handler import (
+    social_command,
+    bonus_command,
+    trixlinks_command,
+    hp_command,
+    handle_info_callback,
+    INFO_CALLBACKS,
 )
 
 # ============= RATING (TOPPEOPLE) =============
@@ -100,10 +108,6 @@ from .games_handler import (
     GAME_CALLBACKS,
 )
 
-from .medicine_handler import hp_command, handle_hp_callback
-from .social_handler import social_command, giveaway_command
-from .bonus_handler import bonus_command
-
 # ============= GIVEAWAY =============
 from .giveaway_handler import (
     giveaway_command,
@@ -112,6 +116,7 @@ from .giveaway_handler import (
     GIVEAWAY_CALLBACKS,
 )
 
+# ============= TRIXTICKET =============
 from .trixticket_handler import (
     tickets_command,
     myticket_command,
@@ -158,10 +163,7 @@ __all__ = [
     'top_command',
     'lastseen_command',
     
-    # Links
-    'trixlinks_command',
-    
-    # Admin (NEW: без basic_handler и advanced_moderation)
+    # Admin
     'admin_command',
     'talkto_command',
     'handle_admin_callback',
@@ -175,6 +177,14 @@ __all__ = [
     # Autopost
     'autopost_command',
     'autopost_test_command',
+    
+    # Info (Social, Bonus, Links, Medicine)
+    'social_command',
+    'bonus_command',
+    'trixlinks_command',
+    'hp_command',
+    'handle_info_callback',
+    'INFO_CALLBACKS',
     
     # Rating (TopPeople)
     'itsme_command',
@@ -227,18 +237,8 @@ __all__ = [
     'handle_game_callback',
     'GAME_CALLBACKS',
     
-    # Medicine
-    'hp_command',
-    'handle_hp_callback',
-    
-    # Social
-    'social_command',
-    'giveaway_command',
-    
-    # Bonus
-    'bonus_command',
-    
     # Giveaway
+    'giveaway_command',
     'handle_giveaway_callback',
     'p2p_command',
     'GIVEAWAY_CALLBACKS',
