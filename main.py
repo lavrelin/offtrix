@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
-TrixBot Main - ВЕРСИЯ 5.2 OPTIMIZED
-Улучшенная архитектура с Budapest фильтром и оптимизированным роутингом
+TrixBot Main - ВЕРСИЯ 5.2.1 FIXED
+Исправлен BudapestChatFilter для совместимости с python-telegram-bot
 """
 import logging
 import asyncio
@@ -104,20 +104,21 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# ============= BUDAPEST CHAT FILTER - ОПТИМИЗИРОВАННЫЙ =============
-class BudapestChatFilter:
+# ============= BUDAPEST CHAT FILTER - ИСПРАВЛЕННЫЙ =============
+class BudapestChatFilter(filters.MessageFilter):
     """
     Фильтр для автоматического игнорирования команд из Budapest чата.
-    Заменяет необходимость оборачивать каждую команду декоратором.
+    Совместим с python-telegram-bot filters system.
     """
     def __init__(self):
         self.budapest_chat_id = Config.BUDAPEST_CHAT_ID
+        super().__init__()
     
-    def __call__(self, update: Update) -> bool:
+    def filter(self, message) -> bool:
         """Возвращает True если сообщение НЕ из Budapest чата"""
-        if not update.effective_chat:
+        if not message or not message.chat:
             return True
-        return update.effective_chat.id != self.budapest_chat_id
+        return message.chat.id != self.budapest_chat_id
 
 # Создаем экземпляр фильтра
 budapest_filter = BudapestChatFilter()
@@ -375,11 +376,11 @@ def main():
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     
-    logger.info("🚀 Starting TrixBot v5.2 OPTIMIZED...")
-    print("🚀 Starting TrixBot v5.2 OPTIMIZED...")
+    logger.info("🚀 Starting TrixBot v5.2.1 FIXED...")
+    print("🚀 Starting TrixBot v5.2.1 FIXED...")
     print(f"📊 Database: {Config.DATABASE_URL[:30]}...")
     print(f"🚫 Budapest chat: {Config.BUDAPEST_CHAT_ID}")
-    print("⚡ Optimized: Budapest filter + callback routing")
+    print("⚡ Fixed: BudapestChatFilter compatibility")
     
     # Initialize DB
     db_initialized = loop.run_until_complete(init_db_tables())
@@ -525,11 +526,11 @@ def main():
     loop.create_task(stats_scheduler.start())
     print("✅ Stats scheduler enabled")
     
-    logger.info("🤖 TrixBot v5.2 OPTIMIZED starting...")
+    logger.info("🤖 TrixBot v5.2.1 FIXED starting...")
     print("\n" + "="*50)
-    print("🤖 TRIXBOT v5.2 OPTIMIZED IS READY!")
+    print("🤖 TRIXBOT v5.2.1 FIXED IS READY!")
     print("="*50)
-    print(f"⚡ Optimized: Budapest filter (class-based)")
+    print(f"⚡ Fixed: BudapestChatFilter (MessageFilter-based)")
     print(f"📋 Callback prefixes: mnc_, pbc_, mdc_, adc_, prc_, ctc_, gmc_, gwc_, rtc_, rmc_, ttc_, hpc_")
     print(f"📊 Stats interval: {Config.STATS_INTERVAL_HOURS}h")
     print(f"📢 Moderation: {Config.MODERATION_GROUP_ID}")
@@ -576,7 +577,7 @@ def main():
         except Exception as loop_error:
             logger.error(f"Error closing loop: {loop_error}")
         
-        print("\n👋 TrixBot v5.2 OPTIMIZED stopped")
+        print("\n👋 TrixBot v5.2.1 FIXED stopped")
 
 if __name__ == '__main__':
     main()
