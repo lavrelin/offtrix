@@ -590,6 +590,7 @@ def main():
     application.add_handler(CommandHandler("categoryfollow", categoryfollow_command))
     
     # Catalog commands - Admin
+    application.add_handler(CommandHandler("catalog", catalog_command))
     application.add_handler(CommandHandler("catalogpriority", catalogpriority_command))
     application.add_handler(CommandHandler("addcatalogreklama", addcatalogreklama_command))
     application.add_handler(CommandHandler("catalogviews", catalogviews_command))
