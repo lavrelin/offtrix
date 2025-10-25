@@ -1,15 +1,16 @@
 # -*- coding: utf-8 -*-
 """
-Handler для каталога услуг - ИСПРАВЛЕННАЯ ВЕРСИЯ 4.1
+Handler для каталога услуг - ПОЛНАЯ ВЕРСИЯ 5.0
 
-Исправления:
-- ✅ Медиа автоматически импортируется и НЕ затирается
-- ✅ Пропуск шага загрузки медиа если оно уже импортировано
-- ✅ Улучшенные сообщения о статусе импорта
-- ✅ Команда /skip для пропуска медиа
+Исправления v5.0:
+- ✅ Реклама: можно добавлять карточку ИЛИ внешнюю ссылку
+- ✅ Отзывы: исправлена обработка текста после звезд
+- ✅ Приоритеты: указание по ID, очистка, редактирование
+- ✅ Новая команда /admincataloginfo
+- ✅ Улучшенные команды управления рекламой
 
-Версия: 4.1.0
-Дата: 24.10.2025
+Версия: 5.0.0
+Дата: 25.10.2025
 """
 import logging
 import re
@@ -36,7 +37,6 @@ async def extract_media_from_link(bot: Bot, telegram_link: str) -> Optional[Dict
                 'message': '❌ Неверная ссылка'
             }
         
-        # Извлекаем username канала и message_id
         match = re.search(r't\.me/([^/]+)/(\d+)', telegram_link)
         if not match:
             logger.warning(f"Could not parse link: {telegram_link}")
@@ -50,11 +50,9 @@ async def extract_media_from_link(bot: Bot, telegram_link: str) -> Optional[Dict
         
         logger.info(f"Parsing link: channel={channel_username}, msg_id={message_id}")
         
-        # Формируем chat_id
         if channel_username.startswith('@'):
             channel_username = channel_username[1:]
         
-        # Если это числовой ID (начинается с -100)
         if channel_username.startswith('-100'):
             chat_id = int(channel_username)
         else:
@@ -62,7 +60,6 @@ async def extract_media_from_link(bot: Bot, telegram_link: str) -> Optional[Dict
         
         logger.info(f"Attempting to fetch from chat_id={chat_id}, message_id={message_id}")
         
-        # МЕТОД 1: Пробуем через forwardMessage
         try:
             logger.info("Method 1: Trying forwardMessage...")
             forwarded = await bot.forward_message(
@@ -119,7 +116,6 @@ async def extract_media_from_link(bot: Bot, telegram_link: str) -> Optional[Dict
                     'message': '⚠️ Медиа не найдено в посте'
                 }
             
-            # Удаляем пересланное сообщение
             try:
                 await bot.delete_message(chat_id=bot.id, message_id=forwarded.message_id)
                 logger.info("Cleaned up forwarded message")
@@ -132,7 +128,6 @@ async def extract_media_from_link(bot: Bot, telegram_link: str) -> Optional[Dict
             error_text = str(forward_error).lower()
             logger.error(f"Method 1 failed: {forward_error}")
             
-            # Определяем причину ошибки
             if 'forbidden' in error_text or 'chat not found' in error_text:
                 return {
                     'success': False,
@@ -166,13 +161,11 @@ async def extract_media_from_link(bot: Bot, telegram_link: str) -> Optional[Dict
 async def send_catalog_post_with_media(bot: Bot, chat_id: int, post: Dict, index: int, total: int) -> bool:
     """Отправка карточки каталога С НОВЫМ ФОРМАТОМ"""
     try:
-        # ============= НОВЫЙ ФОРМАТ КАРТОЧКИ =============
         catalog_number = post.get('catalog_number', '????')
         card_text = f"#️⃣ **Пост {catalog_number}**\n\n"
         card_text += f"📂 {post.get('category', 'Не указана')}\n"
         card_text += f"ℹ️ {post.get('name', 'Без названия')}\n\n"
         
-        # Теги
         tags = post.get('tags', [])
         if tags and isinstance(tags, list):
             tags_formatted = []
@@ -185,7 +178,6 @@ async def send_catalog_post_with_media(bot: Bot, chat_id: int, post: Dict, index
             if tags_formatted:
                 card_text += f"{' '.join(tags_formatted)}\n"
         
-        # Рейтинг (только если 10+ отзывов)
         review_count = post.get('review_count', 0)
         if review_count >= 10:
             rating = post.get('rating', 0)
@@ -194,7 +186,6 @@ async def send_catalog_post_with_media(bot: Bot, chat_id: int, post: Dict, index
         else:
             card_text += f"**Rating**: -\n"
         
-        # НОВЫЕ КНОПКИ
         keyboard = [
             [
                 InlineKeyboardButton("➡️ Перейти", url=post.get('catalog_link', '#'), callback_data=f"catalog:click:{post.get('id')}"),
@@ -227,7 +218,6 @@ async def send_catalog_post_with_media(bot: Bot, chat_id: int, post: Dict, index
         if not sent:
             await bot.send_message(chat_id=chat_id, text=card_text, reply_markup=reply_markup, parse_mode='Markdown', disable_web_page_preview=True)
         
-        # Увеличиваем просмотры
         await catalog_service.increment_views(post.get('id'), chat_id)
         
         return True
@@ -328,7 +318,6 @@ async def catalog_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     count = 5
     
-    # Используем смешанную выдачу
     posts = await catalog_service.get_random_posts_mixed(user_id, count=count)
     
     if not posts:
@@ -386,7 +375,6 @@ async def review_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
     
-    # Ищем по catalog_number
     catalog_number = int(context.args[0])
     post = await catalog_service.get_post_by_number(catalog_number)
     
@@ -394,7 +382,6 @@ async def review_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"❌ Пост #{catalog_number} не найден")
         return
     
-    # Показываем выбор звезд
     context.user_data['catalog_review'] = {
         'post_id': post['id'],
         'catalog_number': catalog_number,
@@ -615,7 +602,7 @@ async def remove_catalog_command(update: Update, context: ContextTypes.DEFAULT_T
     if not context.args or not context.args[0].isdigit():
         await update.message.reply_text(
             "🖍️ Использование: `/remove [номер]`\n\n"
-            "Пример: `/remove 🆔`",
+            "Пример: `/remove 1234`",
             parse_mode='Markdown'
         )
         return
@@ -650,34 +637,224 @@ async def remove_catalog_command(update: Update, context: ContextTypes.DEFAULT_T
 
 
 async def catalogpriority_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Приоритетные посты - /catalogpriority"""
+    """Управление приоритетными постами - /catalogpriority [номера] или clear"""
     if not Config.is_admin(update.effective_user.id):
         await update.message.reply_text("❌ Команда только для администраторов")
         return
     
-    context.user_data['catalog_priority'] = {'links': [], 'step': 'collecting'}
-    keyboard = [[InlineKeyboardButton("✅ Завершить", callback_data="catalog:priority_finish")]]
-    await update.message.reply_text(
-        "⭐ **ПРИОРИТЕТНЫЕ**\n\n"
-        "Отправляйте ссылки (до 10)",
-        reply_markup=InlineKeyboardMarkup(keyboard),
-        parse_mode='Markdown'
+    # Специальная команда: clear
+    if context.args and context.args[0].lower() == 'clear':
+        count = await catalog_service.clear_all_priorities()
+        await update.message.reply_text(f"✅ Очищено {count} приоритетов")
+        return
+    
+    # Если есть аргументы - это номера постов
+    if context.args:
+        post_numbers = []
+        for arg in context.args:
+            try:
+                num = int(arg)
+                if 1 <= num <= 9999:
+                    post_numbers.append(num)
+            except ValueError:
+                continue
+        
+        if post_numbers:
+            success_count = await catalog_service.set_priority_by_numbers(post_numbers)
+            await update.message.reply_text(
+                f"✅ Установлено {success_count}/{len(post_numbers)} приоритетных постов\n\n"
+                f"Номера: {', '.join(f'#{n}' for n in post_numbers)}"
+            )
+            return
+    
+    # Иначе - показать текущие приоритеты и меню
+    priority_stats = await catalog_service.get_priority_stats()
+    posts = priority_stats.get('posts', [])
+    
+    if not posts:
+        text = "⭐ **ПРИОРИТЕТНЫЕ ПОСТЫ** (0/10)\n\n"
+        text += "Нет приоритетных постов\n\n"
+    else:
+        text = f"⭐ **ПРИОРИТЕТНЫЕ ПОСТЫ** ({len(posts)}/10)\n\n"
+        for idx, post in enumerate(posts, 1):
+            text += f"{idx}. #{post['catalog_number']} - {post['name'][:30]}...\n"
+        text += "\n"
+    
+    text += (
+        "**Управление:**\n"
+        "• `/catalogpriority [номера]` - установить\n"
+        "  Пример: `/catalogpriority 1234 5678 9012`\n"
+        "• `/catalogpriority clear` - очистить все\n"
+        "• `/catalogpriority` - показать текущие"
     )
+    
+    keyboard = [
+        [InlineKeyboardButton("🗑 Очистить все", callback_data="catalog:priority_clear")],
+        [InlineKeyboardButton("📊 Статистика", callback_data="catalog:priority_stats")]
+    ]
+    
+    await update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
 
 
 async def addcatalogreklama_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Добавить рекламу - /addcatalogreklama"""
+    """Добавить рекламу - /addcatalogreklama [номер] или создать новую"""
     if not Config.is_admin(update.effective_user.id):
         await update.message.reply_text("❌ Команда только для администраторов")
         return
     
-    context.user_data['catalog_ad'] = {'step': 'link'}
-    keyboard = [[InlineKeyboardButton("🚫 Отмена", callback_data="catalog:cancel_ad")]]
+    # ВАРИАНТ 1: Указан номер поста - сделать его рекламным
+    if context.args and context.args[0].isdigit():
+        catalog_number = int(context.args[0])
+        
+        post = await catalog_service.get_post_by_number(catalog_number)
+        
+        if not post:
+            await update.message.reply_text(f"❌ Пост #{catalog_number} не найден")
+            return
+        
+        success = await catalog_service.set_post_as_ad(post['id'])
+        
+        if success:
+            await update.message.reply_text(
+                f"✅ Пост #{catalog_number} теперь рекламный\n\n"
+                f"📝 {post['name']}\n"
+                f"📂 {post['category']}"
+            )
+        else:
+            await update.message.reply_text("❌ Ошибка при установке рекламы")
+        
+        return
+    
+    # ВАРИАНТ 2: Показать меню выбора
+    context.user_data['catalog_ad'] = {'step': 'choice'}
+    
+    keyboard = [
+        [InlineKeyboardButton("🆔 Сделать существующую карточку рекламной", callback_data="catalog:ad_by_number")],
+        [InlineKeyboardButton("🔗 Создать новую рекламную карточку", callback_data="catalog:ad_by_link")],
+        [InlineKeyboardButton("🚫 Отмена", callback_data="catalog:cancel_ad")]
+    ]
+    
     await update.message.reply_text(
-        "📢 **РЕКЛАМА**\n\nШаг 1/2\n\nСсылка на пост:",
+        "💎 **ДОБАВИТЬ РЕКЛАМУ**\n\n"
+        "Выберите способ:\n\n"
+        "1️⃣ Сделать существующую карточку рекламной (по номеру)\n"
+        "2️⃣ Создать новую рекламную карточку (внешняя ссылка + описание)",
         reply_markup=InlineKeyboardMarkup(keyboard),
         parse_mode='Markdown'
     )
+
+
+async def catalogads_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Список рекламных постов - /catalogads"""
+    if not Config.is_admin(update.effective_user.id):
+        await update.message.reply_text("❌ Только для админов")
+        return
+    
+    ad_stats = await catalog_service.get_ad_stats()
+    ads = ad_stats.get('ads', [])
+    
+    if not ads:
+        await update.message.reply_text("💎 Нет рекламных постов")
+        return
+    
+    text = f"💎 **РЕКЛАМНЫЕ ПОСТЫ** ({len(ads)})\n\n"
+    
+    for idx, ad in enumerate(ads, 1):
+        ctr = (ad['clicks'] / ad['views'] * 100) if ad['views'] > 0 else 0
+        text += (
+            f"{idx}. #{ad['catalog_number']} - {ad['name'][:30]}...\n"
+            f"   👁 {ad['views']} | 🖱 {ad['clicks']} ({ctr:.1f}%)\n\n"
+        )
+    
+    total_views = ad_stats.get('total_views', 0)
+    total_clicks = ad_stats.get('total_clicks', 0)
+    avg_ctr = ad_stats.get('avg_ctr', 0)
+    
+    text += (
+        f"📈 **Итого:**\n"
+        f"👁 {total_views:,} просмотров\n"
+        f"🖱 {total_clicks:,} кликов\n"
+        f"📊 CTR: {avg_ctr:.1f}%"
+    )
+    
+    await update.message.reply_text(text, parse_mode='Markdown')
+
+
+async def removeads_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Удалить рекламу - /removeads [номер]"""
+    if not Config.is_admin(update.effective_user.id):
+        await update.message.reply_text("❌ Только для админов")
+        return
+    
+    if not context.args or not context.args[0].isdigit():
+        await update.message.reply_text(
+            "Использование: `/removeads [номер]`\n"
+            "Пример: `/removeads 1234`",
+            parse_mode='Markdown'
+        )
+        return
+    
+    catalog_number = int(context.args[0])
+    success = await catalog_service.remove_ad_by_number(catalog_number)
+    
+    if success:
+        await update.message.reply_text(f"✅ Реклама удалена с поста #{catalog_number}")
+    else:
+        await update.message.reply_text(f"❌ Пост #{catalog_number} не найден или не является рекламным")
+
+
+async def admincataloginfo_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Список всех команд каталога - /admincataloginfo"""
+    if not Config.is_admin(update.effective_user.id):
+        await update.message.reply_text("❌ Команда только для администраторов")
+        return
+    
+    text = (
+        "📋 **КОМАНДЫ КАТАЛОГА**\n\n"
+        
+        "👤 **ПОЛЬЗОВАТЕЛЬСКИЕ:**\n"
+        "/catalog - просмотр каталога\n"
+        "/search - поиск по каталогу\n"
+        "/review [номер] - оставить отзыв\n"
+        "/categoryfollow - подписки на категории\n\n"
+        
+        "👑 **АДМИНСКИЕ:**\n"
+        "/addtocatalog - добавить пост\n"
+        "/addgirltocat - добавить в TopGirls\n"
+        "/addboytocat - добавить в TopBoys\n"
+        "/catalogedit [номер] - редактировать\n"
+        "/remove [номер] - удалить пост\n"
+        "/changenumber [старый] [новый] - изменить ID\n\n"
+        
+        "⭐ **ПРИОРИТЕТЫ:**\n"
+        "/catalogpriority - управление\n"
+        "/catalogpriority [номера] - установить\n"
+        "  Пример: `/catalogpriority 1234 5678`\n"
+        "/catalogpriority clear - очистить\n\n"
+        
+        "💎 **РЕКЛАМА:**\n"
+        "/addcatalogreklama - меню добавления\n"
+        "/addcatalogreklama [номер] - по номеру карточки\n"
+        "/catalogads - список рекламы\n"
+        "/removeads [номер] - удалить рекламу\n\n"
+        
+        "📊 **СТАТИСТИКА:**\n"
+        "/catalogview - уникальные просмотры\n"
+        "/catalogviews - топ по просмотрам\n"
+        "/catalog_stats_users - общая статистика\n"
+        "/catalog_stats_categories - по категориям\n"
+        "/catalog_stats_popular - топ-10\n"
+        "/catalog_stats_priority - приоритеты\n"
+        "/catalog_stats_reklama - реклама\n\n"
+        
+        "💡 **ПОДСКАЗКИ:**\n"
+        "• Номер - это уникальный ID поста (1-9999)\n"
+        "• Приоритетные посты показываются чаще\n"
+        "• Максимум 10 приоритетных постов\n"
+        "• Реклама: карточка из каталога ИЛИ внешняя ссылка"
+    )
+    
+    await update.message.reply_text(text, parse_mode='Markdown')
 
 
 async def catalogview_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -911,16 +1088,15 @@ async def catalog_stats_reklama_command(update: Update, context: ContextTypes.DE
 # ============= CALLBACKS =============
 
 async def handle_catalog_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Обработчик callback - ИСПРАВЛЕНО для работы с медиа"""
+    """Обработчик callback - ПОЛНАЯ ВЕРСИЯ"""
     query = update.callback_query
     await query.answer()
     data = query.data.split(":")
     action = data[1] if len(data) > 1 else None
     user_id = update.effective_user.id
     
-    # Вспомогательная функция для безопасного редактирования
     async def safe_edit(text, keyboard=None, parse_mode='Markdown'):
-        """Безопасное редактирование - работает с медиа и текстом"""
+        """Безопасное редактирование"""
         try:
             await query.edit_message_text(
                 text,
@@ -928,7 +1104,6 @@ async def handle_catalog_callback(update: Update, context: ContextTypes.DEFAULT_
                 parse_mode=parse_mode
             )
         except Exception:
-            # Если не получилось отредактировать текст (возможно медиа)
             try:
                 await query.edit_message_caption(
                     caption=text,
@@ -936,7 +1111,6 @@ async def handle_catalog_callback(update: Update, context: ContextTypes.DEFAULT_
                     parse_mode=parse_mode
                 )
             except Exception:
-                # Если вообще не получилось - отправляем новое сообщение
                 await query.message.reply_text(
                     text,
                     reply_markup=keyboard,
@@ -1071,6 +1245,59 @@ async def handle_catalog_callback(update: Update, context: ContextTypes.DEFAULT_
             await safe_edit("❌ Ссылки не добавлены")
         context.user_data.pop('catalog_priority', None)
     
+    elif action == "priority_clear":
+        count = await catalog_service.clear_all_priorities()
+        await safe_edit(f"✅ Очищено {count} приоритетов")
+    
+    elif action == "priority_stats":
+        stats = await catalog_service.get_priority_stats()
+        posts = stats.get('posts', [])
+        
+        if not posts:
+            await safe_edit("⭐ Нет приоритетных постов")
+            return
+        
+        text = f"📊 **СТАТИСТИКА ПРИОРИТЕТОВ** ({len(posts)}/10)\n\n"
+        
+        for idx, post in enumerate(posts, 1):
+            ctr = (post['clicks'] / post['views'] * 100) if post['views'] > 0 else 0
+            text += (
+                f"{idx}. #{post['catalog_number']}\n"
+                f"   {post['name'][:25]}...\n"
+                f"   👁 {post['views']} | 🖱 {post['clicks']} ({ctr:.1f}%)\n\n"
+            )
+        
+        avg_ctr = stats.get('avg_ctr', 0)
+        normal_ctr = stats.get('normal_ctr', 0)
+        improvement = stats.get('improvement', 0)
+        
+        text += (
+            f"📈 **Эффективность:**\n"
+            f"• Приоритеты: {avg_ctr:.1f}%\n"
+            f"• Обычные: {normal_ctr:.1f}%\n"
+            f"• Прирост: +{improvement:.1f}%"
+        )
+        
+        await safe_edit(text)
+    
+    # ============= РЕКЛАМА - НОВЫЕ CALLBACKS =============
+    
+    elif action == "ad_by_number":
+        context.user_data['catalog_ad'] = {'step': 'number'}
+        await safe_edit(
+            "🆔 **Сделать карточку рекламной**\n\n"
+            "Введите номер существующей карточки (1-9999):"
+        )
+    
+    elif action == "ad_by_link":
+        context.user_data['catalog_ad'] = {'step': 'link'}
+        await safe_edit(
+            "🔗 **Создать новую рекламную карточку**\n\n"
+            "Шаг 1/2\n\n"
+            "Введите внешнюю ссылку:\n"
+            "Пример: https://example.com/promo"
+        )
+    
     # ============= ПОДПИСКИ =============
     
     elif action == "follow_menu":
@@ -1134,7 +1361,6 @@ async def handle_catalog_callback(update: Update, context: ContextTypes.DEFAULT_
         success = await catalog_service.unsubscribe_from_category(user_id, category)
         await query.answer("✅ Отписались" if success else "❌ Ошибка", show_alert=True)
         
-        # Обновляем меню подписок
         subscriptions = await catalog_service.get_user_subscriptions(user_id)
         
         if not subscriptions:
@@ -1334,7 +1560,7 @@ async def handle_catalog_callback(update: Update, context: ContextTypes.DEFAULT_
 # ============= TEXT HANDLER =============
 
 async def handle_catalog_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Обработчик текста - С ИСПРАВЛЕННОЙ ЛОГИКОЙ ИМПОРТА МЕДИА"""
+    """Обработчик текста - ПОЛНАЯ ВЕРСИЯ С ИСПРАВЛЕНИЯМИ"""
     user_id = update.effective_user.id
     text = update.message.text
     
@@ -1363,6 +1589,49 @@ async def handle_catalog_text(update: Update, context: ContextTypes.DEFAULT_TYPE
         context.user_data.pop('catalog_search', None)
         return
     
+    # ============= ОТЗЫВЫ - ИСПРАВЛЕНО =============
+    if 'catalog_review' in context.user_data:
+        data = context.user_data['catalog_review']
+        step = data.get('step')
+        
+        if step == 'text':
+            review_text = text.strip()
+            
+            if len(review_text) < 3:
+                await update.message.reply_text("❌ Отзыв слишком короткий (минимум 3 символа)")
+                return
+            
+            if len(review_text) > 500:
+                review_text = review_text[:500]
+            
+            post_id = data.get('post_id')
+            rating = data.get('rating', 5)
+            catalog_number = data.get('catalog_number', '????')
+            
+            review_id = await catalog_service.add_review(
+                post_id=post_id,
+                user_id=user_id,
+                review_text=review_text,
+                rating=rating,
+                username=update.effective_user.username,
+                bot=context.bot  # <- ВАЖНО для уведомлений
+            )
+            
+            if review_id:
+                stars = "⭐" * rating
+                await update.message.reply_text(
+                    f"✅ Отзыв сохранён!\n\n"
+                    f"#{catalog_number}\n"
+                    f"Оценка: {stars}\n"
+                    f"Текст: \"{review_text[:100]}...\"\n\n"
+                    f"Спасибо за ваш отзыв!"
+                )
+            else:
+                await update.message.reply_text("❌ Ошибка при сохранении отзыва")
+            
+            context.user_data.pop('catalog_review', None)
+            return
+    
     # Добавление поста - ИСПРАВЛЕННАЯ ЛОГИКА
     if 'catalog_add' in context.user_data:
         data = context.user_data['catalog_add']
@@ -1372,7 +1641,6 @@ async def handle_catalog_text(update: Update, context: ContextTypes.DEFAULT_TYPE
             if text.startswith('https://t.me/'):
                 data['catalog_link'] = text
                 
-                # ✅ ИМПОРТИРУЕМ МЕДИА С УВЕДОМЛЕНИЕМ
                 await update.message.reply_text("⏳ Импортирую медиа из поста...")
                 
                 media_result = await extract_media_from_link(context.bot, text)
@@ -1417,7 +1685,6 @@ async def handle_catalog_text(update: Update, context: ContextTypes.DEFAULT_TYPE
         elif step == 'name':
             data['name'] = text[:255]
             
-            # ✅ ПРОВЕРЯЕМ - ЕСЛИ МЕДИА УЖЕ ИМПОРТИРОВАНО, ПРОПУСКАЕМ ШАГ
             if data.get('media_file_id'):
                 data['step'] = 'tags'
                 media_emoji = {
@@ -1441,7 +1708,6 @@ async def handle_catalog_text(update: Update, context: ContextTypes.DEFAULT_TYPE
                     "Отправьте фото/видео или нажмите /skip если медиа не нужно"
                 )
         
-        # ✅ КОМАНДА ДЛЯ ПРОПУСКА МЕДИА
         elif text == '/skip' and step == 'media':
             data['step'] = 'tags'
             await update.message.reply_text(
@@ -1456,7 +1722,6 @@ async def handle_catalog_text(update: Update, context: ContextTypes.DEFAULT_TYPE
             tags = [t.strip() for t in text.split(',') if t.strip()][:10]
             data['tags'] = tags
             
-            # Сохраняем пост
             post_id = await catalog_service.add_post(
                 user_id=user_id,
                 catalog_link=data['catalog_link'],
@@ -1484,7 +1749,6 @@ async def handle_catalog_text(update: Update, context: ContextTypes.DEFAULT_TYPE
                     f"📸 Медиа: {has_media}{media_info}"
                 )
                 
-                # Уведомляем подписчиков
                 await notify_subscribers_about_new_post(context.bot, post_id, data['category'])
             else:
                 await update.message.reply_text("❌ Ошибка при добавлении поста")
@@ -1492,6 +1756,84 @@ async def handle_catalog_text(update: Update, context: ContextTypes.DEFAULT_TYPE
             context.user_data.pop('catalog_add', None)
         
         return
+    
+    # ============= РЕКЛАМА - НОВАЯ ЛОГИКА =============
+    if 'catalog_ad' in context.user_data:
+        data = context.user_data['catalog_ad']
+        step = data.get('step')
+        
+        # ВАРИАНТ 1: Указан номер карточки
+        if step == 'number':
+            try:
+                catalog_number = int(text.strip())
+                if catalog_number < 1 or catalog_number > 9999:
+                    await update.message.reply_text("❌ Номер должен быть от 1 до 9999")
+                    return
+                
+                post = await catalog_service.get_post_by_number(catalog_number)
+                
+                if not post:
+                    await update.message.reply_text(f"❌ Пост #{catalog_number} не найден")
+                    return
+                
+                success = await catalog_service.set_post_as_ad(post['id'])
+                
+                if success:
+                    await update.message.reply_text(
+                        f"✅ Пост #{catalog_number} теперь рекламный!\n\n"
+                        f"📝 {post['name']}\n"
+                        f"📂 {post['category']}"
+                    )
+                else:
+                    await update.message.reply_text("❌ Ошибка")
+                
+                context.user_data.pop('catalog_ad', None)
+                
+            except ValueError:
+                await update.message.reply_text("❌ Введите число")
+            
+            return
+        
+        # ВАРИАНТ 2: Внешняя ссылка - создать новую рекламную карточку
+        elif step == 'link':
+            # Проверяем что это ссылка
+            if not text.startswith('http'):
+                await update.message.reply_text("❌ Введите корректную ссылку (начинается с http)")
+                return
+            
+            data['catalog_link'] = text
+            data['step'] = 'description'
+            
+            await update.message.reply_text(
+                "✅ Ссылка сохранена\n\n"
+                "📝 Шаг 2/2\n\n"
+                "Введите описание рекламы (до 255 символов):"
+            )
+            return
+        
+        elif step == 'description':
+            description = text.strip()[:255]
+            
+            # Создаем рекламную карточку с внешней ссылкой
+            ad_id = await catalog_service.add_ad_post(
+                catalog_link=data['catalog_link'],
+                description=description
+            )
+            
+            if ad_id:
+                post = await catalog_service.get_post_by_id(ad_id)
+                catalog_number = post.get('catalog_number', '????') if post else '????'
+                
+                await update.message.reply_text(
+                    f"✅ Реклама #{catalog_number} добавлена!\n\n"
+                    f"🔗 Ссылка: {data['catalog_link']}\n"
+                    f"📝 Описание: {description}"
+                )
+            else:
+                await update.message.reply_text("❌ Ошибка при добавлении рекламы")
+            
+            context.user_data.pop('catalog_ad', None)
+            return
     
     # Приоритетные посты
     if 'catalog_priority' in context.user_data and context.user_data['catalog_priority'].get('step') == 'collecting':
@@ -1504,34 +1846,6 @@ async def handle_catalog_text(update: Update, context: ContextTypes.DEFAULT_TYPE
                 f"✅ Добавлено: {len(links)}/10\n\n"
                 "Отправьте ещё ссылки или нажмите 'Завершить'"
             )
-        return
-    
-    # Реклама
-    if 'catalog_ad' in context.user_data:
-        data = context.user_data['catalog_ad']
-        step = data.get('step')
-        
-        if step == 'link':
-            if text.startswith('https://t.me/'):
-                data['catalog_link'] = text
-                data['step'] = 'description'
-                await update.message.reply_text("📝 Шаг 2/2\n\nОписание рекламы:")
-            else:
-                await update.message.reply_text("❌ Ссылка должна начинаться с https://t.me/")
-        
-        elif step == 'description':
-            ad_id = await catalog_service.add_ad_post(
-                catalog_link=data['catalog_link'],
-                description=text[:255]
-            )
-            
-            if ad_id:
-                await update.message.reply_text(f"✅ Реклама #{ad_id} добавлена!")
-            else:
-                await update.message.reply_text("❌ Ошибка при добавлении рекламы")
-            
-            context.user_data.pop('catalog_ad', None)
-        
         return
     
     # Редактирование поста
@@ -1551,11 +1865,11 @@ async def handle_catalog_text(update: Update, context: ContextTypes.DEFAULT_TYPE
             context.user_data.pop('catalog_edit', None)
         
         elif field == 'link':
-            if text.startswith('https://t.me/'):
+            if text.startswith('https://t.me/') or text.startswith('http'):
                 success = await catalog_service.update_post_field(post_id, 'catalog_link', text)
                 await update.message.reply_text("✅ Ссылка обновлена!" if success else "❌ Ошибка")
             else:
-                await update.message.reply_text("❌ Ссылка должна начинаться с https://t.me/")
+                await update.message.reply_text("❌ Ссылка должна начинаться с http")
             context.user_data.pop('catalog_edit', None)
         
         elif field == 'number':
@@ -1586,6 +1900,9 @@ __all__ = [
     'remove_catalog_command',
     'catalogpriority_command',
     'addcatalogreklama_command',
+    'catalogads_command',
+    'removeads_command',
+    'admincataloginfo_command',
     'catalogview_command',
     'catalogviews_command',
     'catalog_stats_users_command',
