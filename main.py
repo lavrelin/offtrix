@@ -584,7 +584,6 @@ def main():
     application.add_handler(CommandHandler("toppeoplereset", toppeoplereset_command))
     
     # Catalog commands - User
-    application.add_handler(CommandHandler("catalog", catalog_command))
     application.add_handler(CommandHandler("search", search_command))
     application.add_handler(CommandHandler("addtocatalog", addtocatalog_command))
     application.add_handler(CommandHandler("review", review_command))
