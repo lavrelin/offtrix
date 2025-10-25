@@ -39,7 +39,7 @@ class CooldownService:
     
     # ============= ДЕКОРАТОРЫ =============
     
-    async def cooldown(
+   def cooldown(
     self,
     seconds: int = None,
     cooldown_type: CooldownType = CooldownType.NORMAL,
@@ -55,7 +55,6 @@ class CooldownService:
     )
 
     return can_use, remaining
-
     # Установка кулдауна
     await cooldown_service.set_cooldown(
         user_id=user_id,
