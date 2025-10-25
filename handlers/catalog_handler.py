@@ -23,18 +23,7 @@ from services.catalog_service import catalog_service, CATALOG_CATEGORIES
 
 logger = logging.getLogger(__name__)
 
-
-# ============= УЛУЧШЕННАЯ ФУНКЦИЯ ИМПОРТА МЕДИА =============
-
-async def extract_media_from_link(bot: Bot, telegram_link: str) -> Optional[Dict]:
-    """
-    Автоматический импорт медиа из поста - УЛУЧШЕННАЯ ВЕРСИЯ
-    
-    Изменения:
-    1. Используем copyMessage вместо forwardMessage
-    2. Проверяем права бота в канале
-    3. Лучшая обработка ошибок
-    """
+async def extract_media_from_link(bot: Bot, telegram_link:
     try:
         if not telegram_link or 't.me/' not in telegram_link:
             logger.warning(f"Invalid link format: {telegram_link}")
@@ -62,143 +51,183 @@ async def extract_media_from_link(bot: Bot, telegram_link: str) -> Optional[Dict
             channel_username = channel_username[1:]
         
         # Определяем chat_id
-        if channel_username.startswith('-100') or channel_username.isdigit():
-            chat_id = int(channel_username) if channel_username.startswith('-') else int(f"-100{channel_username}")
+        if channel_username.startswith('-100') or (channel_username.startswith('-') and channel_username[1:].isdigit()):
+            chat_id = int(channel_username)
+            logger.info(f"Using numeric chat_id: {chat_id}")
+        elif channel_username.isdigit():
+            chat_id = int(f"-100{channel_username}")
             logger.info(f"Using numeric chat_id: {chat_id}")
         else:
             chat_id = f"@{channel_username}"
             logger.info(f"Using username: {chat_id}")
         
-        # ============= МЕТОД 1: copyMessage (САМЫЙ НАДЁЖНЫЙ) =============
+        # ============= ПРОВЕРКА ДОСТУПА К КАНАЛУ =============
         try:
-            logger.info("🔄 Method 1: Trying copyMessage...")
-            
-            # Сначала получаем информацию о сообщении
-            try:
-                # Проверяем доступ к каналу
-                chat_info = await bot.get_chat(chat_id)
-                logger.info(f"✅ Channel access OK: {chat_info.title}")
-            except Forbidden as e:
-                logger.error(f"❌ Bot не имеет доступа к каналу: {e}")
-                return {
-                    'success': False,
-                    'message': (
-                        '❌ Бот не может получить доступ к каналу\n\n'
-                        '**Решение:**\n'
-                        '1. Добавьте бота @TrixLiveBot в канал как администратора\n'
-                        '2. Или загрузите медиа вручную'
-                    )
-                }
-            
-            # Копируем сообщение во временный чат бота
-            copied = await bot.copy_message(
-                chat_id=bot.id,  # Отправляем себе
-                from_chat_id=chat_id,
-                message_id=message_id
-            )
-            
-            logger.info(f"✅ Message copied: {copied.message_id}")
-            
-            # Получаем скопированное сообщение
-            copied_message = await bot.forward_message(
-                chat_id=bot.id,
-                from_chat_id=bot.id,
-                message_id=copied.message_id
-            )
-            
-            result = None
-            
-            if copied_message.photo:
-                result = {
-                    'success': True,
-                    'type': 'photo',
-                    'file_id': copied_message.photo[-1].file_id,
-                    'media_group_id': copied_message.media_group_id,
-                    'media_json': [copied_message.photo[-1].file_id],
-                    'message': '✅ Фото импортировано'
-                }
-                logger.info(f"✅ Photo imported: {result['file_id'][:20]}...")
-                
-            elif copied_message.video:
-                result = {
-                    'success': True,
-                    'type': 'video',
-                    'file_id': copied_message.video.file_id,
-                    'media_group_id': copied_message.media_group_id,
-                    'media_json': [copied_message.video.file_id],
-                    'message': '✅ Видео импортировано'
-                }
-                logger.info(f"✅ Video imported: {result['file_id'][:20]}...")
-                
-            elif copied_message.document:
-                result = {
-                    'success': True,
-                    'type': 'document',
-                    'file_id': copied_message.document.file_id,
-                    'media_group_id': copied_message.media_group_id,
-                    'media_json': [copied_message.document.file_id],
-                    'message': '✅ Документ импортирован'
-                }
-                logger.info(f"✅ Document imported: {result['file_id'][:20]}...")
-                
-            elif copied_message.animation:
-                result = {
-                    'success': True,
-                    'type': 'animation',
-                    'file_id': copied_message.animation.file_id,
-                    'media_group_id': copied_message.media_group_id,
-                    'media_json': [copied_message.animation.file_id],
-                    'message': '✅ Анимация импортирована'
-                }
-                logger.info(f"✅ Animation imported: {result['file_id'][:20]}...")
-            else:
-                logger.warning("⚠️ No media found in copied message")
-                result = {
-                    'success': False,
-                    'message': '⚠️ Медиа не найдено в посте'
-                }
-            
-            # Удаляем временные сообщения
-            try:
-                await bot.delete_message(chat_id=bot.id, message_id=copied.message_id)
-                await bot.delete_message(chat_id=bot.id, message_id=copied_message.message_id)
-                logger.info("🧹 Cleaned up temporary messages")
-            except Exception as del_error:
-                logger.warning(f"Could not delete temporary messages: {del_error}")
-            
-            return result
-            
-        except Forbidden as forbidden_error:
-            logger.error(f"❌ Forbidden error: {forbidden_error}")
+            chat_info = await bot.get_chat(chat_id)
+            logger.info(f"✅ Channel access OK: {chat_info.title}")
+        except Forbidden as e:
+            logger.error(f"❌ Bot не имеет доступа к каналу: {e}")
             return {
                 'success': False,
                 'message': (
                     '❌ Бот не может получить доступ к каналу\n\n'
                     '**Решение:**\n'
-                    '1. Добавьте бота в канал как администратора\n'
-                    '2. Дайте боту права на чтение сообщений\n'
-                    '3. Или загрузите медиа вручную'
+                    '1. Добавьте бота @TrixLiveBot в канал\n'
+                    '2. Сделайте бота администратором\n'
+                    '3. Дайте права на чтение сообщений\n'
+                    '4. Или загрузите медиа вручную'
                 )
             }
+        except BadRequest as e:
+            logger.error(f"❌ Канал не найден: {e}")
+            return {
+                'success': False,
+                'message': (
+                    '❌ Канал не найден\n\n'
+                    'Проверьте:\n'
+                    '1. Правильность ссылки\n'
+                    '2. Канал публичный\n'
+                    '3. ID канала корректен'
+                )
+            }
+        
+        # ============= НОВЫЙ МЕТОД: ПРЯМОЕ ПОЛУЧЕНИЕ СООБЩЕНИЯ =============
+        try:
+            logger.info("🔄 Method: Using direct API call to get message...")
             
+            # Используем низкоуровневый API для получения сообщения
+            from telegram import Message
+            
+            # Создаём запрос напрямую через bot API
+            import httpx
+            
+            # Формируем URL для API
+            api_url = f"https://api.telegram.org/bot{bot.token}/getUpdates"
+            
+            # АЛЬТЕРНАТИВНЫЙ СПОСОБ: используем forwardMessage в приватный чат пользователя
+            # Но для этого нам нужен user_id, который мы можем получить из context
+            
+            # ЛУЧШИЙ СПОСОБ: Просто копируем file_id из оригинального сообщения
+            # Получаем информацию о сообщении через forward без сохранения
+            
+            logger.info("🔄 Attempting to forward message temporarily...")
+            
+            # Попробуем переслать в канал модерации (где бот точно админ)
+            from config import Config
+            temp_chat_id = Config.MODERATION_GROUP_ID
+            
+            try:
+                # Пересылаем во временный чат
+                forwarded = await bot.forward_message(
+                    chat_id=temp_chat_id,
+                    from_chat_id=chat_id,
+                    message_id=message_id
+                )
+                
+                logger.info(f"✅ Message forwarded to temp chat: {forwarded.message_id}")
+                
+                result = None
+                
+                # Извлекаем медиа
+                if forwarded.photo:
+                    result = {
+                        'success': True,
+                        'type': 'photo',
+                        'file_id': forwarded.photo[-1].file_id,
+                        'media_group_id': forwarded.media_group_id,
+                        'media_json': [forwarded.photo[-1].file_id],
+                        'message': '✅ Фото импортировано'
+                    }
+                    logger.info(f"✅ Photo imported: {result['file_id'][:20]}...")
+                    
+                elif forwarded.video:
+                    result = {
+                        'success': True,
+                        'type': 'video',
+                        'file_id': forwarded.video.file_id,
+                        'media_group_id': forwarded.media_group_id,
+                        'media_json': [forwarded.video.file_id],
+                        'message': '✅ Видео импортировано'
+                    }
+                    logger.info(f"✅ Video imported: {result['file_id'][:20]}...")
+                    
+                elif forwarded.document:
+                    result = {
+                        'success': True,
+                        'type': 'document',
+                        'file_id': forwarded.document.file_id,
+                        'media_group_id': forwarded.media_group_id,
+                        'media_json': [forwarded.document.file_id],
+                        'message': '✅ Документ импортирован'
+                    }
+                    logger.info(f"✅ Document imported: {result['file_id'][:20]}...")
+                    
+                elif forwarded.animation:
+                    result = {
+                        'success': True,
+                        'type': 'animation',
+                        'file_id': forwarded.animation.file_id,
+                        'media_group_id': forwarded.media_group_id,
+                        'media_json': [forwarded.animation.file_id],
+                        'message': '✅ Анимация импортирована'
+                    }
+                    logger.info(f"✅ Animation imported: {result['file_id'][:20]}...")
+                else:
+                    logger.warning("⚠️ No media found in forwarded message")
+                    result = {
+                        'success': False,
+                        'message': (
+                            '⚠️ Медиа не найдено в посте\n\n'
+                            'Возможные причины:\n'
+                            '1. Пост содержит только текст\n'
+                            '2. Медиа было удалено\n\n'
+                            'Вы можете загрузить медиа вручную на следующем шаге'
+                        )
+                    }
+                
+                # Удаляем пересланное сообщение из временного чата
+                try:
+                    await bot.delete_message(chat_id=temp_chat_id, message_id=forwarded.message_id)
+                    logger.info("🧹 Cleaned up forwarded message from temp chat")
+                except Exception as del_error:
+                    logger.warning(f"Could not delete forwarded message: {del_error}")
+                
+                return result
+                
+            except Forbidden as fwd_error:
+                logger.error(f"❌ Cannot forward to temp chat: {fwd_error}")
+                return {
+                    'success': False,
+                    'message': (
+                        '❌ Не удалось импортировать медиа\n\n'
+                        'Причина: Недостаточно прав для пересылки\n\n'
+                        '💡 Решение:\n'
+                        '1. Загрузите медиа вручную\n'
+                        '2. Или скопируйте file_id из оригинального поста'
+                    )
+                }
+                
         except BadRequest as bad_request:
             error_text = str(bad_request).lower()
             logger.error(f"❌ BadRequest: {bad_request}")
             
-            if 'message to copy not found' in error_text or 'message not found' in error_text:
+            if 'message to forward not found' in error_text or 'message not found' in error_text:
                 return {
                     'success': False,
-                    'message': '❌ Сообщение не найдено (удалено или неверный ID)'
+                    'message': (
+                        '❌ Сообщение не найдено\n\n'
+                        'Возможные причины:\n'
+                        '1. Сообщение было удалено\n'
+                        '2. Неверный ID сообщения\n'
+                        '3. Бот не имеет доступа к истории'
+                    )
                 }
             elif 'chat not found' in error_text:
                 return {
                     'success': False,
                     'message': (
                         '❌ Канал не найден\n\n'
-                        'Проверьте:\n'
-                        '1. Правильность ссылки\n'
-                        '2. Канал публичный или бот добавлен\n'
-                        '3. ID канала корректен'
+                        'Проверьте правильность ссылки'
                     )
                 }
             else:
@@ -207,13 +236,6 @@ async def extract_media_from_link(bot: Bot, telegram_link: str) -> Optional[Dict
                     'message': f'⚠️ Ошибка: {str(bad_request)[:100]}'
                 }
                 
-        except TelegramError as tg_error:
-            logger.error(f"❌ TelegramError: {tg_error}")
-            return {
-                'success': False,
-                'message': f'⚠️ Telegram ошибка: {str(tg_error)[:100]}'
-            }
-        
     except Exception as e:
         logger.error(f"❌ Critical error in extract_media_from_link: {e}", exc_info=True)
         return {
