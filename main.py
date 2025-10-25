@@ -15,7 +15,7 @@ from dotenv import load_dotenv
 from config import Config
 
 # ============= ОСНОВНЫЕ HANDLERS =============
-from handlers.start_handler import start_command, help_command
+from handlers.start_handler import start_command
 from handlers.menu_handler import handle_menu_callback
 from handlers.publication_handler import (
     handle_publication_callback, handle_text_input, handle_media_input
