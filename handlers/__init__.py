@@ -1,5 +1,6 @@
-# handlers/__init__.py - OPTIMIZED v5.2
-# Без profile_handler и help_commands
+# handlers/__init__.py - OPTIMIZED v5.3
+# Удалены: basic_handler, advanced_moderation, stats_commands
+# Добавлены: id_command, report_command, silence_command из admin_handler
 
 from .start_handler import start_command, help_command, show_main_menu, show_write_menu
 from .menu_handler import handle_menu_callback
@@ -25,35 +26,24 @@ from .moderation_handler import (
     top_command,
     lastseen_command
 )
-from .basic_handler import (
-    id_command, 
-    participants_command, 
-    report_command
-)
 from .link_handler import trixlinks_command
-from .advanced_moderation import (
-    del_command, 
-    purge_command, 
-    slowmode_command, 
-    noslowmode_command,
-    lockdown_command, 
-    antiinvite_command, 
-    tagall_command, 
-    admins_command
-)
 from .admin_handler import (
     admin_command, 
-    say_command, 
+    talkto_command,
     handle_admin_callback,
     broadcast_command,
-    sendstats_command
+    sendstats_command,
+    id_command,
+    report_command,
+    silence_command,
+    is_user_silenced
 )
 from .autopost_handler import (
     autopost_command, 
     autopost_test_command
 )
 
-# ============= RATING (TOPPEOPLE) - OPTIMIZED v5.2 =============
+# ============= RATING (TOPPEOPLE) =============
 from .rating_handler import (
     itsme_command,
     toppeople_command,
@@ -71,7 +61,7 @@ from .rating_handler import (
     RATING_MOD_CALLBACKS,
 )
 
-# ============= CATALOG - OPTIMIZED v5.2 =============
+# ============= CATALOG =============
 from .catalog_handler import (
     catalog_command,
     search_command,
@@ -86,7 +76,7 @@ from .catalog_handler import (
     CATALOG_CALLBACKS,
 )
 
-# ============= GAMES - OPTIMIZED v5.2 =============
+# ============= GAMES =============
 from .games_handler import (
     wordadd_command, 
     wordedit_command, 
@@ -111,16 +101,10 @@ from .games_handler import (
 )
 
 from .medicine_handler import hp_command, handle_hp_callback
-from .stats_commands import (
-    channelstats_command,
-    fullstats_command,
-    resetmsgcount_command,
-    chatinfo_command
-)
 from .social_handler import social_command, giveaway_command
 from .bonus_handler import bonus_command
 
-# ============= GIVEAWAY - OPTIMIZED v5.2 =============
+# ============= GIVEAWAY =============
 from .giveaway_handler import (
     giveaway_command,
     handle_giveaway_callback,
@@ -174,36 +158,25 @@ __all__ = [
     'top_command',
     'lastseen_command',
     
-    # Basic
-    'id_command',
-    'participants_command',
-    'report_command',
-    
     # Links
     'trixlinks_command',
     
-    # Advanced moderation
-    'del_command',
-    'purge_command',
-    'slowmode_command',
-    'noslowmode_command',
-    'lockdown_command',
-    'antiinvite_command',
-    'tagall_command',
-    'admins_command',
-    
-    # Admin
+    # Admin (NEW: без basic_handler и advanced_moderation)
     'admin_command',
-    'say_command',
+    'talkto_command',
     'handle_admin_callback',
     'broadcast_command',
     'sendstats_command',
+    'id_command',
+    'report_command',
+    'silence_command',
+    'is_user_silenced',
     
     # Autopost
     'autopost_command',
     'autopost_test_command',
     
-    # Rating (TopPeople) - OPTIMIZED v5.2
+    # Rating (TopPeople)
     'itsme_command',
     'toppeople_command',
     'topboys_command',
@@ -219,7 +192,7 @@ __all__ = [
     'RATING_CALLBACKS',
     'RATING_MOD_CALLBACKS',
     
-    # Catalog - OPTIMIZED v5.2
+    # Catalog
     'catalog_command',
     'search_command',
     'addtocatalog_command',
@@ -232,7 +205,7 @@ __all__ = [
     'handle_catalog_media',
     'CATALOG_CALLBACKS',
     
-    # Games - OPTIMIZED v5.2
+    # Games
     'wordadd_command',
     'wordedit_command',
     'wordclear_command',
@@ -258,12 +231,6 @@ __all__ = [
     'hp_command',
     'handle_hp_callback',
     
-    # Stats
-    'channelstats_command',
-    'fullstats_command',
-    'resetmsgcount_command',
-    'chatinfo_command',
-    
     # Social
     'social_command',
     'giveaway_command',
@@ -271,7 +238,7 @@ __all__ = [
     # Bonus
     'bonus_command',
     
-    # Giveaway - OPTIMIZED v5.2
+    # Giveaway
     'handle_giveaway_callback',
     'p2p_command',
     'GIVEAWAY_CALLBACKS',
