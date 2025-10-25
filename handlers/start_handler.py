@@ -171,11 +171,3 @@ async def show_write_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "Выберите раздел публикации:",
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
-
-async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle /help command - теперь показывает главное меню"""
-    await show_main_menu(update, context)
-
-def generate_referral_code():
-    """Generate unique referral code"""
-    return ''.join(secrets.choice(string.ascii_letters + string.digits) for _ in range(8))
