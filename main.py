@@ -329,7 +329,6 @@ def main():
     
     # Start and basic commands
     application.add_handler(CommandHandler("start", start_command, filters=budapest_filter))
-    application.add_handler(CommandHandler("help", help_command, filters=budapest_filter))
     application.add_handler(CommandHandler("id", id_command, filters=budapest_filter))
     application.add_handler(CommandHandler("report", report_command, filters=budapest_filter))
     application.add_handler(CommandHandler("hp", hp_command, filters=budapest_filter))
