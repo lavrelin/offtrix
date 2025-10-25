@@ -201,6 +201,10 @@ __all__ = [
     'handle_catalog_callback',
     'handle_catalog_text',
     'handle_catalog_media',
+    'admincataloginfo_command',
+    'catalogads_command',
+    'removeads_command',
+    
     
     # Games
     'wordadd_command',
