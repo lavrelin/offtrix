@@ -45,15 +45,21 @@ class CooldownService:
         cooldown_type: CooldownType = CooldownType.NORMAL,
         command_name: str = None,
         bypass_for_mods: bool = True
-    ):
-        """
-        Декоратор для добавления кулдауна к команде
-        
-        Usage:
-            @cooldown_service.cooldown(seconds=3600, command_name='post')
-            async def my_command(update, context):
-                ...
-        """
+        # Проверка кулдауна
+        can_use, remaining = await cooldown_service.check_cooldown(
+        user_id=user_id,
+        command='itsme',
+        duration=24 * 3600,
+        cooldown_type=CooldownType.NORMAL
+    )
+
+    # Установка кулдауна
+    await cooldown_service.set_cooldown(
+        user_id=user_id,
+        command='itsme',
+        duration=24 * 3600,
+        cooldown_type=CooldownType.NORMAL
+    )
         def decorator(func: Callable):
             @wraps(func)
             async def wrapper(update, context, *args, **kwargs):
