@@ -5,6 +5,9 @@ import logging
 import secrets
 import string
 
+# Import optimized callback constants
+from handlers.menu_handler import MENU_CALLBACKS
+
 logger = logging.getLogger(__name__)
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -61,7 +64,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await show_main_menu(update, context)
 
 async def show_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Show new main menu design"""
+    """Show new main menu design - OPTIMIZED VERSION"""
     
     # ✅ КРИТИЧНО: Не показываем меню в Будапешт чате
     chat_id = update.effective_chat.id
@@ -69,12 +72,13 @@ async def show_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.info(f"Blocked main menu in Budapest chat")
         return
     
+    # ✅ ИСПОЛЬЗУЕМ ОПТИМИЗИРОВАННЫЕ КОНСТАНТЫ
     keyboard = [
         [InlineKeyboardButton("🙅‍♂️ Будапешт - канал", url="https://t.me/snghu")],
         [InlineKeyboardButton("🙅‍♀️ Будапешт - чат", url="https://t.me/tgchatxxx")],
         [InlineKeyboardButton("🙅 Будапешт - каталог услуг", url="https://t.me/catalogtrix")],
         [InlineKeyboardButton("🕵️‍♂️ Куплю / Отдам / Продам", url="https://t.me/hungarytrade")],
-        [InlineKeyboardButton("🚶‍♀️‍➡️ Писать", callback_data="menu:write")]
+        [InlineKeyboardButton("🚶‍♀️‍➡️ Писать", callback_data=MENU_CALLBACKS['write'])]
     ]
     
     text = (
@@ -124,13 +128,14 @@ async def show_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
 
 async def show_write_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Show write menu with publication types"""
+    """Show write menu with publication types - OPTIMIZED VERSION"""
     
+    # ✅ ИСПОЛЬЗУЕМ ОПТИМИЗИРОВАННЫЕ КОНСТАНТЫ
     keyboard = [
-        [InlineKeyboardButton("Пост в 🙅‍♂️Будапешт/🕵🏼‍♀️КОП", callback_data="menu:budapest")],
-        [InlineKeyboardButton("Заявка в 🙅Каталог Услуг", callback_data="menu:services")],
-        [InlineKeyboardButton("⚡️Актуальное", callback_data="menu:actual")],
-        [InlineKeyboardButton("🚶‍♀️Читать", callback_data="menu:read")]
+        [InlineKeyboardButton("Пост в 🙅‍♂️Будапешт/🕵🏼‍♀️КОП", callback_data=MENU_CALLBACKS['budapest'])],
+        [InlineKeyboardButton("Заявка в 🙅Каталог Услуг", callback_data=MENU_CALLBACKS['services'])],
+        [InlineKeyboardButton("⚡️Актуальное", callback_data=MENU_CALLBACKS['actual'])],
+        [InlineKeyboardButton("🚶‍♀️Читать", callback_data=MENU_CALLBACKS['read'])]
     ]
     
     text = (
