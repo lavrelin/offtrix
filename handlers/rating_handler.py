@@ -545,8 +545,64 @@ async def handle_rate_moderation_callback(update: Update, context: ContextTypes.
         await reject_rating_post(update, context, post_id)
     elif action == "edit":
         await start_edit_rating_post(update, context, post_id)
+    elif action == "back":
+        await restore_moderation_buttons(update, context, post_id)
 
 # ============= РЕДАКТИРОВАНИЕ В МОДЕРАЦИИ =============
+
+async def restore_moderation_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE, post_id: int):
+    """Вернуть оригинальные кнопки модерации"""
+    query = update.callback_query
+    
+    if post_id not in rating_data['posts']:
+        await query.answer("❌ Пост не найден", show_alert=True)
+        return
+    
+    post = rating_data['posts'][post_id]
+    name = post.get('name', 'Без имени')
+    profile_url = post.get('profile_url', '')
+    age = post.get('age', 0)
+    about = post.get('about', '')
+    gender = post.get('gender', 'boy')
+    catalog_number = post.get('catalog_number', '????')
+    
+    gender_text = "Парень" if gender == "boy" else "Девушка"
+    
+    # Форматируем имя как ссылку
+    if profile_url.startswith('@'):
+        formatted_name = f"[{name}](https://t.me/{profile_url[1:]})"
+    elif 'instagram.com' in profile_url:
+        formatted_name = f"[{name}]({profile_url})"
+    else:
+        formatted_name = f"[{name}]({profile_url})"
+    
+    keyboard = [
+        [
+            InlineKeyboardButton("✅ Опубликовать", callback_data=f"rate_mod:approve:{post_id}"),
+            InlineKeyboardButton("❌ Отклонить", callback_data=f"rate_mod:reject:{post_id}")
+        ],
+        [InlineKeyboardButton("✏️ Редактировать", callback_data=f"rate_mod:edit:{post_id}")]
+    ]
+    
+    caption = (
+        f"🆕 **Новая заявка на модерацию**\n\n"
+        f"👤 {formatted_name}\n"
+        f"{gender_text}, {age} лет\n"
+        f"💬 {about}\n\n"
+        f"🆔 #{catalog_number}\n\n"
+        f"Решение модератора?"
+    )
+    
+    try:
+        await query.edit_message_caption(
+            caption=caption,
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode='Markdown'
+        )
+        await query.answer("⬅️ Возврат к модерации")
+    except Exception as e:
+        logger.error(f"Error restoring moderation buttons: {e}")
+        await query.answer("❌ Ошибка", show_alert=True)
 
 async def start_edit_rating_post(update: Update, context: ContextTypes.DEFAULT_TYPE, post_id: int):
     """Начать редактирование поста"""
