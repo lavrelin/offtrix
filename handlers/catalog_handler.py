@@ -166,11 +166,13 @@ async def send_catalog_post(bot: Bot, chat_id: int, post: Dict, index: int, tota
         # Add tags
         tags = post.get('tags', [])
         if tags and isinstance(tags, list):
-            clean_tags = [f"#{re.sub(r'[^\w\-]', '', str(tag).replace(' ', '_'))}"
-                          
-f"Теги: {[tag for tag in tags[:5] if tag]}"
+            clean_tags = [
+                f"#{re.sub(r'[^\w\-]', '', str(tag).replace(' ', '_'))}"
+                for tag in tags[:5]
+                if tag
+            ]
             if clean_tags:
-                card_text += f"{' '.join(clean_tags)}\n"
+                card_text += f"Теги: {' '.join(clean_tags)}\n"
         
         # Add rating
         review_count = post.get('review_count', 0)
@@ -412,7 +414,7 @@ async def addboytocat_command(update: Update, context: ContextTypes.DEFAULT_TYPE
         parse_mode='Markdown'
     )
 
-# ============= MORE ADMIN COMMANDS (Continued in next file) =============
+# ============= MEDIA HANDLER =============
 
 async def handle_catalog_media(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
     """Handle media upload - OPTIMIZED"""
@@ -458,7 +460,7 @@ async def handle_catalog_callback(update: Update, context: ContextTypes.DEFAULT_
     
     # Remove prefix
     if data_parts[0].startswith('ctc_'):
-        action = data_parts[0][4:]  # Remove 'ctc_' prefix
+        action = data_parts[0][4:]
     else:
         action = data_parts[0]
     
@@ -538,7 +540,31 @@ async def handle_catalog_callback(update: Update, context: ContextTypes.DEFAULT_
             InlineKeyboardMarkup(keyboard)
         )
     
-    # More handlers continue...
+    elif action == 'cancel_review':
+        context.user_data.pop('catalog_review', None)
+        await safe_edit("❌ Отзыв отменён")
+    
+    elif action == 'cancel':
+        context.user_data.pop('catalog_add', None)
+        await safe_edit("❌ Добавление отменено")
+    
+    elif action == 'cancel_top':
+        context.user_data.pop('catalog_add_top', None)
+        await safe_edit("❌ Добавление отменено")
+    
+    elif action == 'add_cat':
+        if 'catalog_add' not in context.user_data:
+            await query.answer("❌ Сессия истекла", show_alert=True)
+            return
+        
+        category = ":".join(data_parts[1:]) if len(data_parts) > 1 else "Общее"
+        context.user_data['catalog_add']['category'] = category
+        context.user_data['catalog_add']['step'] = 'name'
+        
+        await safe_edit(
+            f"✅ Категория: {category}\n\n"
+            f"📝 Шаг 3/5\n\nНазвание (макс. 255 символов):"
+        )
 
 # ============= TEXT HANDLER =============
 
