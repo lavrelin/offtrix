@@ -1,20 +1,21 @@
 # -*- coding: utf-8 -*-
 """
-Сервис для работы с каталогом услуг - ПОЛНАЯ ВЕРСИЯ 4.1
+Сервис для работы с каталогом услуг - ПОЛНАЯ ВЕРСИЯ 5.0
 
-Новое в v4.1:
-- ✅ Добавлены методы set_post_as_ad и remove_ad_by_number
-- ✅ Улучшенное управление рекламными постами
+Новое в v5.0:
+- ✅ Интеграция с rating_handler для TopPeople
+- ✅ Рейтинг из голосований отображается в каталоге
+- ✅ Улучшенный импорт медиа
+- ✅ Полная поддержка TopGirls и TopBoys
+- ✅ Уведомления авторам о новых отзывах
+- ✅ Смешанная выдача (4 обычных + 1 Top)
+- ✅ Уникальные catalog_number (1-9999)
+- ✅ Приоритетные посты (до 10)
+- ✅ Рекламные посты с частотой показа
+- ✅ Подписки на категории с уведомлениями
+- ✅ Статистика просмотров и переходов
 
-Новое в v4.0:
-- ✅ Добавлены категории TopGirl и TopBoy
-- ✅ Уведомления авторам и админам о новых отзывах
-- ✅ Поля author_username и author_id для владельца карточки
-- ✅ Улучшенный импорт медиа с уведомлениями
-- ✅ Смешанная выдача каталога (4 обычных + 1 Top)
-- ✅ Импорт рейтинга из rating_handler для Top постов
-
-Версия: 4.1.0
+Версия: 5.0.0
 Дата: 25.10.2025
 """
 import logging
@@ -28,7 +29,7 @@ from config import Config
 
 logger = logging.getLogger(__name__)
 
-# ============= КАТЕГОРИИ КАТАЛОГА - ОБНОВЛЕНО =============
+# ============= КАТЕГОРИИ КАТАЛОГА =============
 CATALOG_CATEGORIES = {
     '💇‍♀️ Красота и уход': [
         'Барбер', 'БьютиПроцедуры', 'Волосы', 'Косметолог',
@@ -53,14 +54,14 @@ CATALOG_CATEGORIES = {
         'Еда', 'Фотограф', 'Экскурсии', 'Для детей', 'Ремонт',
         'Швея', 'Цветы', 'Видеограф', 'Аниматоры', 'Организация праздников'
     ],
-    # ============= НОВЫЕ КАТЕГОРИИ =============
+    # TopPeople категории
     '👱🏻‍♀️ TopGirls': [],
     '🤵🏼‍♂️ TopBoys': []
 }
 
 
 class CatalogService:
-    """Сервис для работы с каталогом услуг - ВЕРСИЯ 4.1"""
+    """Сервис для работы с каталогом услуг - ВЕРСИЯ 5.0"""
     
     def __init__(self):
         self.max_posts_per_page = 5
@@ -84,7 +85,7 @@ class CatalogService:
         
         raise Exception("Could not generate unique catalog number after 100 attempts")
     
-    # ============= БАЗОВЫЕ МЕТОДЫ - ОБНОВЛЕНО =============
+    # ============= БАЗОВЫЕ МЕТОДЫ =============
     
     async def add_post(
         self,
@@ -137,7 +138,59 @@ class CatalogService:
             logger.error(f"Error adding catalog post: {e}")
             return None
     
-    # ============= НОВЫЙ МЕТОД: СМЕШАННАЯ ВЫДАЧА =============
+    # ============= ПОЛУЧЕНИЕ РЕЙТИНГА ИЗ TOPPEOPLE =============
+    
+    async def get_rating_from_toppeople(self, catalog_link: str) -> tuple:
+        """
+        Получить рейтинг из TopPeople для отображения в каталоге
+        
+        Returns:
+            tuple: (rating: float, vote_count: int)
+        """
+        try:
+            from handlers.rating_handler import rating_data
+            
+            # Ищем пост по ссылке
+            for post_id, post_data in rating_data.get('posts', {}).items():
+                published_link = post_data.get('published_link', '')
+                
+                # Проверяем совпадение ссылок
+                if published_link == catalog_link:
+                    votes = post_data.get('votes', {})
+                    
+                    if not votes:
+                        return (0.0, 0)
+                    
+                    # Считаем средний рейтинг
+                    total_score = sum(votes.values())
+                    vote_count = len(votes)
+                    avg_score = total_score / vote_count if vote_count > 0 else 0
+                    
+                    # Конвертируем в шкалу 0-5 звезд
+                    # -2 до +2 → 0 до 5 звезд
+                    # Формула: (avg_score + 2) * 1.25
+                    rating = max(0, min(5, (avg_score + 2) * 1.25))
+                    
+                    logger.info(f"Rating from TopPeople: {rating:.1f} stars ({vote_count} votes)")
+                    return (round(rating, 1), vote_count)
+            
+            # Если пост не найден
+            return (0.0, 0)
+            
+        except Exception as e:
+            logger.error(f"Error getting rating from TopPeople: {e}")
+            return (0.0, 0)
+    
+    async def _get_rating_from_original_post(self, catalog_link: str) -> float:
+        """Импортировать рейтинг из оригинального поста TopPeople"""
+        try:
+            rating, vote_count = await self.get_rating_from_toppeople(catalog_link)
+            return rating
+        except Exception as e:
+            logger.error(f"Error importing rating: {e}")
+            return 0.0
+    
+    # ============= СМЕШАННАЯ ВЫДАЧА =============
     
     async def get_random_posts_mixed(self, user_id: int, count: int = 5) -> List[Dict]:
         """Получить смешанные посты: 4 обычных + 1 из TopGirl/TopBoy"""
@@ -231,8 +284,9 @@ class CatalogService:
                     post_dict = self._post_to_dict(post)
                     
                     if post.category in ['👱🏻‍♀️ TopGirls', '🤵🏼‍♂️ TopBoys']:
-                        post_dict['rating'] = await self._get_rating_from_original_post(post.catalog_link)
-                        post_dict['review_count'] = 0
+                        rating, vote_count = await self.get_rating_from_toppeople(post.catalog_link)
+                        post_dict['rating'] = rating
+                        post_dict['review_count'] = vote_count
                     else:
                         reviews_result = await session.execute(
                             select(
@@ -259,26 +313,8 @@ class CatalogService:
             logger.error(f"Error getting mixed random posts: {e}")
             return []
     
-    async def _get_rating_from_original_post(self, catalog_link: str) -> float:
-        """Импортировать рейтинг из оригинального поста rating_handler"""
-        try:
-            from handlers.rating_handler import rating_data
-            
-            for post_id, post_data in rating_data.get('posts', {}).items():
-                if post_data.get('profile_url') == catalog_link or catalog_link in str(post_data):
-                    votes = post_data.get('votes', {})
-                    if votes:
-                        avg_rating = sum(votes.values()) / len(votes)
-                        return max(0, min(5, (avg_rating + 2) * 1.25))
-            
-            return 0
-            
-        except Exception as e:
-            logger.error(f"Error importing rating: {e}")
-            return 0
-    
     async def get_random_posts(self, user_id: int, count: int = 5) -> List[Dict]:
-        """Получить случайные посты без повторов (старый метод для совместимости)"""
+        """Получить случайные посты без повторов"""
         try:
             async with db.get_session() as session:
                 result = await session.execute(
@@ -323,8 +359,9 @@ class CatalogService:
                     post_dict = self._post_to_dict(post)
                     
                     if post.category in ['👱🏻‍♀️ TopGirls', '🤵🏼‍♂️ TopBoys']:
-                        post_dict['rating'] = await self._get_rating_from_original_post(post.catalog_link)
-                        post_dict['review_count'] = 0
+                        rating, vote_count = await self.get_rating_from_toppeople(post.catalog_link)
+                        post_dict['rating'] = rating
+                        post_dict['review_count'] = vote_count
                     else:
                         reviews_result = await session.execute(
                             select(
@@ -350,7 +387,7 @@ class CatalogService:
             return []
     
     async def search_posts(self, query: str, limit: int = 10) -> List[Dict]:
-        """Поиск постов ТОЛЬКО по ключевым словам и тегам - ИСПРАВЛЕНО"""
+        """Поиск постов по ключевым словам и тегам"""
         try:
             from sqlalchemy import String, cast
             
@@ -362,7 +399,7 @@ class CatalogService:
                     # Поиск по названию
                     conditions.append(func.lower(CatalogPost.name).contains(keyword))
                     
-                    # ИСПРАВЛЕНО: Поиск по тегам через приведение к строке
+                    # Поиск по тегам
                     conditions.append(
                         cast(CatalogPost.tags, String).ilike(f'%{keyword}%')
                     )
@@ -381,10 +418,10 @@ class CatalogService:
                 for post in posts:
                     post_dict = self._post_to_dict(post)
                     
-                    # Добавляем рейтинг
                     if post.category in ['👱🏻‍♀️ TopGirls', '🤵🏼‍♂️ TopBoys']:
-                        post_dict['rating'] = await self._get_rating_from_original_post(post.catalog_link)
-                        post_dict['review_count'] = 0
+                        rating, vote_count = await self.get_rating_from_toppeople(post.catalog_link)
+                        post_dict['rating'] = rating
+                        post_dict['review_count'] = vote_count
                     else:
                         reviews_result = await session.execute(
                             select(
@@ -421,8 +458,9 @@ class CatalogService:
                 post_dict = self._post_to_dict(post)
                 
                 if post.category in ['👱🏻‍♀️ TopGirls', '🤵🏼‍♂️ TopBoys']:
-                    post_dict['rating'] = await self._get_rating_from_original_post(post.catalog_link)
-                    post_dict['review_count'] = 0
+                    rating, vote_count = await self.get_rating_from_toppeople(post.catalog_link)
+                    post_dict['rating'] = rating
+                    post_dict['review_count'] = vote_count
                 else:
                     reviews_result = await session.execute(
                         select(
@@ -456,8 +494,9 @@ class CatalogService:
                 post_dict = self._post_to_dict(post)
                 
                 if post.category in ['👱🏻‍♀️ TopGirls', '🤵🏼‍♂️ TopBoys']:
-                    post_dict['rating'] = await self._get_rating_from_original_post(post.catalog_link)
-                    post_dict['review_count'] = 0
+                    rating, vote_count = await self.get_rating_from_toppeople(post.catalog_link)
+                    post_dict['rating'] = rating
+                    post_dict['review_count'] = vote_count
                 else:
                     reviews_result = await session.execute(
                         select(
@@ -506,6 +545,8 @@ class CatalogService:
         except Exception as e:
             logger.error(f"Error changing catalog number: {e}")
             return False
+    
+    # ============= ПРОСМОТРЫ И КЛИКИ =============
     
     async def increment_views(self, post_id: int, user_id: Optional[int] = None):
         """Увеличить счётчик просмотров"""
@@ -557,7 +598,7 @@ class CatalogService:
         except Exception as e:
             logger.error(f"Error resetting session: {e}")
     
-    # ============= НОВЫЙ МЕТОД: УВЕДОМЛЕНИЯ О НОВЫХ ОТЗЫВАХ =============
+    # ============= ОТЗЫВЫ =============
     
     async def notify_new_review(
         self,
@@ -630,13 +671,6 @@ class CatalogService:
                         admin_message += f"   (автор: {post.author_username}, не запустил бота)\n"
                 
                 try:
-                    chat_info = await bot.get_chat(Config.ADMIN_GROUP_ID)
-                    admin_message += f"\n💬 ID чата: {Config.ADMIN_GROUP_ID}\n"
-                    admin_message += f"🏷️ Название: {chat_info.title}\n"
-                except:
-                    admin_message += f"\n💬 ID чата: {Config.ADMIN_GROUP_ID}\n"
-                
-                try:
                     await bot.send_message(
                         chat_id=Config.ADMIN_GROUP_ID,
                         text=admin_message,
@@ -648,8 +682,6 @@ class CatalogService:
                 
         except Exception as e:
             logger.error(f"Error in notify_new_review: {e}")
-    
-    # ============= ОТЗЫВЫ - ОБНОВЛЕНО =============
     
     async def add_review(
         self,
@@ -1118,6 +1150,8 @@ class CatalogService:
                 'total_reviews': 0
             }
     
+    # ============= ПРИОРИТЕТЫ =============
+    
     async def get_priority_stats(self) -> Dict:
         """Статистика по приоритетным постам"""
         try:
@@ -1171,6 +1205,61 @@ class CatalogService:
             logger.error(f"Error getting priority stats: {e}")
             return {'posts': [], 'avg_ctr': 0, 'normal_ctr': 0, 'improvement': 0}
     
+    async def set_priority_by_numbers(self, catalog_numbers: List[int]) -> int:
+        """Установить приоритетные посты по номерам"""
+        try:
+            count = 0
+            async with db.get_session() as session:
+                # Сбрасываем все приоритеты
+                posts_to_reset = (await session.execute(
+                    select(CatalogPost).where(CatalogPost.is_priority == True)
+                )).scalars().all()
+                
+                for post in posts_to_reset:
+                    post.is_priority = False
+                
+                # Устанавливаем новые приоритеты
+                for number in catalog_numbers[:self.max_priority_posts]:
+                    result = await session.execute(
+                        select(CatalogPost).where(CatalogPost.catalog_number == number)
+                    )
+                    post = result.scalar_one_or_none()
+                    
+                    if post:
+                        post.is_priority = True
+                        count += 1
+                
+                await session.commit()
+                logger.info(f"Set {count} priority posts by numbers")
+                return count
+                
+        except Exception as e:
+            logger.error(f"Error setting priority posts: {e}")
+            return 0
+    
+    async def clear_all_priorities(self) -> int:
+        """Очистить все приоритеты"""
+        try:
+            async with db.get_session() as session:
+                result = await session.execute(
+                    select(CatalogPost).where(CatalogPost.is_priority == True)
+                )
+                posts = result.scalars().all()
+                count = len(posts)
+                
+                for post in posts:
+                    post.is_priority = False
+                
+                await session.commit()
+                logger.info(f"Cleared {count} priority posts")
+                return count
+                
+        except Exception as e:
+            logger.error(f"Error clearing priorities: {e}")
+            return 0
+    
+    # ============= РЕКЛАМА =============
+    
     async def get_ad_stats(self) -> Dict:
         """Статистика по рекламным постам"""
         try:
@@ -1208,67 +1297,6 @@ class CatalogService:
         except Exception as e:
             logger.error(f"Error getting ad stats: {e}")
             return {'ads': [], 'total_views': 0, 'total_clicks': 0, 'avg_ctr': 0}
-    
-    # ============= ПРИОРИТЕТЫ И РЕКЛАМА =============
-    
-    async def set_priority_posts(self, links: List[str]) -> int:
-        """Установить приоритетные посты по ссылкам"""
-        try:
-            count = 0
-            async with db.get_session() as session:
-                posts_to_reset = (await session.execute(
-                    select(CatalogPost).where(CatalogPost.is_priority == True)
-                )).scalars().all()
-                
-                for post in posts_to_reset:
-                    post.is_priority = False
-                
-                for link in links[:self.max_priority_posts]:
-                    result = await session.execute(
-                        select(CatalogPost).where(CatalogPost.catalog_link == link)
-                    )
-                    post = result.scalar_one_or_none()
-                    
-                    if post:
-                        post.is_priority = True
-                        count += 1
-                
-                await session.commit()
-                logger.info(f"Set {count} priority posts")
-                return count
-                
-        except Exception as e:
-            logger.error(f"Error setting priority posts: {e}")
-            return 0
-    
-    async def add_ad_post(self, catalog_link: str, description: str) -> Optional[int]:
-        """Добавить рекламный пост"""
-        try:
-            async with db.get_session() as session:
-                catalog_number = await self._generate_unique_catalog_number(session)
-                
-                post = CatalogPost(
-                    user_id=0,
-                    catalog_link=catalog_link,
-                    category='Реклама',
-                    name=description,
-                    tags=[],
-                    catalog_number=catalog_number,
-                    is_active=True,
-                    is_ad=True,
-                    ad_frequency=self.ad_frequency
-                )
-                
-                session.add(post)
-                await session.commit()
-                await session.refresh(post)
-                
-                logger.info(f"Added ad post #{catalog_number} (ID: {post.id})")
-                return post.id
-                
-        except Exception as e:
-            logger.error(f"Error adding ad post: {e}")
-            return None
     
     async def set_post_as_ad(self, post_id: int) -> bool:
         """Сделать пост рекламным"""
@@ -1322,6 +1350,59 @@ class CatalogService:
             logger.error(f"Error removing ad: {e}")
             return False
     
+    async def add_ad_post(self, catalog_link: str, description: str) -> Optional[int]:
+        """Добавить рекламный пост"""
+        try:
+            async with db.get_session() as session:
+                catalog_number = await self._generate_unique_catalog_number(session)
+                
+                post = CatalogPost(
+                    user_id=0,
+                    catalog_link=catalog_link,
+                    category='Реклама',
+                    name=description,
+                    tags=[],
+                    catalog_number=catalog_number,
+                    is_active=True,
+                    is_ad=True,
+                    ad_frequency=self.ad_frequency
+                )
+                
+                session.add(post)
+                await session.commit()
+                await session.refresh(post)
+                
+                logger.info(f"Added ad post #{catalog_number} (ID: {post.id})")
+                return post.id
+                
+        except Exception as e:
+            logger.error(f"Error adding ad post: {e}")
+            return None
+    
+    # ============= ВСПОМОГАТЕЛЬНЫЕ МЕТОДЫ =============
+    
+    def _post_to_dict(self, post: CatalogPost) -> Dict:
+        """Конвертировать пост в словарь"""
+        return {
+            'id': post.id,
+            'catalog_number': post.catalog_number,
+            'catalog_link': post.catalog_link,
+            'category': post.category,
+            'name': post.name,
+            'tags': post.tags or [],
+            'views': post.views,
+            'clicks': post.clicks,
+            'media_type': post.media_type,
+            'media_file_id': post.media_file_id,
+            'media_group_id': post.media_group_id,
+            'media_json': post.media_json or [],
+            'author_username': post.author_username,
+            'author_id': post.author_id,
+            'created_at': post.created_at.isoformat() if post.created_at else None,
+            'is_priority': post.is_priority,
+            'is_ad': post.is_ad
+        }
+    
     async def get_user_posts(self, user_id: int) -> List[Dict]:
         """Получить все посты пользователя"""
         try:
@@ -1352,30 +1433,6 @@ class CatalogService:
         except Exception as e:
             logger.error(f"Error getting user posts: {e}")
             return []
-    
-    # ============= ВСПОМОГАТЕЛЬНЫЕ МЕТОДЫ =============
-    
-    def _post_to_dict(self, post: CatalogPost) -> Dict:
-        """Конвертировать пост в словарь"""
-        return {
-            'id': post.id,
-            'catalog_number': post.catalog_number,
-            'catalog_link': post.catalog_link,
-            'category': post.category,
-            'name': post.name,
-            'tags': post.tags or [],
-            'views': post.views,
-            'clicks': post.clicks,
-            'media_type': post.media_type,
-            'media_file_id': post.media_file_id,
-            'media_group_id': post.media_group_id,
-            'media_json': post.media_json or [],
-            'author_username': post.author_username,
-            'author_id': post.author_id,
-            'created_at': post.created_at.isoformat() if post.created_at else None,
-            'is_priority': post.is_priority,
-            'is_ad': post.is_ad
-        }
 
 
 # ============= ГЛОБАЛЬНЫЙ ЭКЗЕМПЛЯР =============
