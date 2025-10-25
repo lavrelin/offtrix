@@ -59,11 +59,9 @@ from handlers.giveaway_handler import (
 )
 
 # ============= ОСТАЛЬНЫЕ HANDLERS =============
-from handlers.link_handler import trixlinks_command
+from handlers.info_handler import (
+    social_command, bonus_command, trixlinks_command, hp_command, handle_info_callback
 from handlers.autopost_handler import autopost_command, autopost_test_command
-from handlers.medicine_handler import hp_command, handle_hp_callback
-from handlers.social_handler import social_command
-from handlers.bonus_handler import bonus_command
 from handlers.trixticket_handler import (
     tickets_command, myticket_command, trixtickets_command,
     handle_trixticket_callback, givett_command, removett_command,
@@ -175,6 +173,8 @@ async def handle_all_callbacks(update: Update, context):
             await handle_piar_callback(update, context)
         elif data.startswith('ctc_'):
             await handle_catalog_callback(update, context)
+        elif data.startswith('ifc_'):
+            await handle_info_callback(update, context)
         elif data.startswith('gmc_'):
             await handle_game_callback(update, context)
         elif data.startswith('gwc_'):
