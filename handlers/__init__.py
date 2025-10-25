@@ -72,7 +72,7 @@ from .rating_handler import (
 )
 
 # ============= CATALOG - OPTIMIZED v5.2 =============
-from .catalog_handler_optimized import (
+from .catalog_handler import (
     catalog_command,
     search_command,
     addtocatalog_command,
@@ -87,7 +87,7 @@ from .catalog_handler_optimized import (
 )
 
 # ============= GAMES - OPTIMIZED v5.2 =============
-from .games_handler_optimized import (
+from .games_handler import (
     wordadd_command, 
     wordedit_command, 
     wordclear_command,
@@ -121,7 +121,7 @@ from .social_handler import social_command, giveaway_command
 from .bonus_handler import bonus_command
 
 # ============= GIVEAWAY - OPTIMIZED v5.2 =============
-from .giveaway_handler_optimized import (
+from .giveaway_handler import (
     giveaway_command,
     handle_giveaway_callback,
     p2p_command,
