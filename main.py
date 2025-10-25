@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
-TrixBot Main - ВЕРСИЯ 5.0 FIXED
-Исправлена синтаксическая ошибка с импортами
+TrixBot Main - ВЕРСИЯ 5.0 OPTIMIZED
+Интеграция оптимизированных handlers с уникальными префиксами
 """
 import logging
 import asyncio
@@ -13,11 +13,24 @@ from telegram.ext import (
 from dotenv import load_dotenv
 from config import Config
 
-# ============= HANDLERS - ОСНОВНЫЕ =============
+# ============= HANDLERS - ОСНОВНЫЕ (OPTIMIZED) =============
 from handlers.start_handler import start_command, help_command, show_main_menu, show_write_menu
-from handlers.menu_handler import handle_menu_callback
-from handlers.publication_handler import handle_publication_callback, handle_text_input, handle_media_input
-from handlers.piar_handler import handle_piar_callback, handle_piar_text, handle_piar_photo
+
+# Оптимизированные handlers с константами
+from handlers.menu_handler import handle_menu_callback, MENU_CALLBACKS
+from handlers.publication_handler import (
+    handle_publication_callback, 
+    handle_text_input, 
+    handle_media_input,
+    PUB_CALLBACKS
+)
+from handlers.piar_handler import (
+    handle_piar_callback, 
+    handle_piar_text, 
+    handle_piar_photo,
+    PIAR_CALLBACKS,
+    PIAR_STEPS
+)
 from handlers.moderation_handler import (
     handle_moderation_callback,
     handle_moderation_text,
@@ -28,8 +41,19 @@ from handlers.moderation_handler import (
     banlist_command,
     stats_command,
     top_command,
-    lastseen_command
+    lastseen_command,
+    MOD_CALLBACKS
 )
+from handlers.admin_handler import (
+    admin_command,
+    say_command,
+    handle_admin_callback,
+    broadcast_command,
+    sendstats_command,
+    ADMIN_CALLBACKS
+)
+
+# ============= HANDLERS - НЕОПТИМИЗИРОВАННЫЕ (Legacy) =============
 from handlers.profile_handler import handle_profile_callback
 from handlers.basic_handler import id_command, participants_command, report_command
 from handlers.link_handler import trixlinks_command
@@ -45,9 +69,6 @@ from handlers.advanced_moderation import (
     tagall_command,
     admins_command
 )
-
-# ============= HANDLERS - АДМИН =============
-from handlers.admin_handler import admin_command, say_command, handle_admin_callback, broadcast_command, sendstats_command
 
 # ============= HANDLERS - AUTOPOST =============
 from handlers.autopost_handler import autopost_command, autopost_test_command
@@ -222,7 +243,6 @@ def ignore_budapest_chat_commands(func):
     """Decorator to ignore commands from Budapest chat"""
     async def wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE):
         chat_id = update.effective_chat.id
-        user_id = update.effective_user.id
         
         if chat_id == Config.BUDAPEST_CHAT_ID:
             if update.message and update.message.text and update.message.text.startswith('/'):
@@ -340,54 +360,93 @@ catalogads_command = ignore_budapest_chat_commands(catalogads_command)
 removeads_command = ignore_budapest_chat_commands(removeads_command)
 
 async def handle_all_callbacks(update: Update, context):
-    """Router for all callback queries"""
+    """Router for all callback queries - OPTIMIZED VERSION"""
     query = update.callback_query
     
     if not query or not query.data:
         return
     
-    # Ignore callbacks from Budapest chat
+    # Ignore Budapest chat
     if query.message and query.message.chat.id == Config.BUDAPEST_CHAT_ID:
         await query.answer("⚠️ Бот не работает в этом чате", show_alert=True)
         logger.info(f"Ignored callback from Budapest chat: {query.data}")
         return
     
-    data_parts = query.data.split(":")
-    handler_type = data_parts[0] if data_parts else None
-    
-    logger.info(f"Callback: {query.data} from user {update.effective_user.id}")
+    data = query.data
+    logger.info(f"Callback: {data} from user {update.effective_user.id}")
     
     try:
-        if handler_type == "menu":
+        # ============= OPTIMIZED HANDLERS - Route by prefix =============
+        if data.startswith('mnc_'):
+            # Menu callbacks
             await handle_menu_callback(update, context)
-        elif handler_type == "pub":
+        elif data.startswith('pbc_'):
+            # Publication callbacks
             await handle_publication_callback(update, context)
-        elif handler_type == "piar":
-            await handle_piar_callback(update, context)
-        elif handler_type == "mod":
+        elif data.startswith('mdc_'):
+            # Moderation callbacks
             await handle_moderation_callback(update, context)
-        elif handler_type == "admin":
+        elif data.startswith('adc_'):
+            # Admin callbacks
             await handle_admin_callback(update, context)
-        elif handler_type == "profile":
+        elif data.startswith('prc_'):
+            # Piar/Services callbacks
+            await handle_piar_callback(update, context)
+        
+        # ============= LEGACY HANDLERS - Keep for non-optimized modules =============
+        elif data.startswith('pfc_') or data.split(":")[0] == "profile":
+            # Profile callbacks
             await handle_profile_callback(update, context)
-        elif handler_type == "game":
+        elif data.startswith('gmc_') or data.split(":")[0] == "game":
+            # Game callbacks
             await handle_game_callback(update, context)
-        elif handler_type == "hp":
+        elif data.startswith('hpc_') or data.split(":")[0] == "hp":
+            # HP callbacks
             await handle_hp_callback(update, context)
-        elif handler_type == "trix":
+        elif data.startswith('trc_') or data.split(":")[0] == "trix":
+            # Trix help callbacks
             await handle_trix_callback(update, context)
-        elif handler_type == "giveaway":
+        elif data.startswith('gwc_') or data.split(":")[0] == "giveaway":
+            # Giveaway callbacks
             await handle_giveaway_callback(update, context)
-        elif handler_type == "tt":
+        elif data.startswith('ttc_') or data.split(":")[0] == "tt":
+            # TrixTicket callbacks
             await handle_trixticket_callback(update, context)
-        elif handler_type == "rate":
+        elif data.startswith('rtc_') or data.split(":")[0] == "rate":
+            # Rating callbacks
             await handle_rate_callback(update, context)
-        elif handler_type == "rate_mod":
+        elif data.startswith('rmc_') or data.split(":")[0] == "rate_mod":
+            # Rating moderation callbacks
             await handle_rate_moderation_callback(update, context)
-        elif handler_type == "catalog":
+        elif data.startswith('ctc_') or data.split(":")[0] == "catalog":
+            # Catalog callbacks
             await handle_catalog_callback(update, context)
+        
+        # ============= BACKWARD COMPATIBILITY - Old format support =============
+        elif ":" in data:
+            # Old format fallback - will be deprecated
+            handler_type = data.split(":")[0]
+            
+            if handler_type == "menu":
+                logger.warning(f"Old menu format detected: {data}")
+                await handle_menu_callback(update, context)
+            elif handler_type == "pub":
+                logger.warning(f"Old publication format detected: {data}")
+                await handle_publication_callback(update, context)
+            elif handler_type == "piar":
+                logger.warning(f"Old piar format detected: {data}")
+                await handle_piar_callback(update, context)
+            elif handler_type == "mod":
+                logger.warning(f"Old moderation format detected: {data}")
+                await handle_moderation_callback(update, context)
+            elif handler_type == "admin":
+                logger.warning(f"Old admin format detected: {data}")
+                await handle_admin_callback(update, context)
+            else:
+                await query.answer("⚠️ Неизвестная команда", show_alert=True)
         else:
             await query.answer("⚠️ Неизвестная команда", show_alert=True)
+            
     except Exception as e:
         logger.error(f"Error handling callback: {e}", exc_info=True)
         try:
@@ -524,10 +583,11 @@ def main():
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     
-    logger.info("🚀 Starting TrixBot v5.0...")
-    print("🚀 Starting TrixBot v5.0...")
+    logger.info("🚀 Starting TrixBot v5.0 OPTIMIZED...")
+    print("🚀 Starting TrixBot v5.0 OPTIMIZED...")
     print(f"📊 Database: {Config.DATABASE_URL[:30]}...")
     print(f"🚫 Budapest chat: {Config.BUDAPEST_CHAT_ID}")
+    print("⚡ Optimized handlers: menu, publication, moderation, admin, piar")
     
     # Initialize DB
     db_initialized = loop.run_until_complete(init_db_tables())
@@ -689,10 +749,11 @@ def main():
     loop.create_task(stats_scheduler.start())
     print("✅ Stats scheduler enabled")
     
-    logger.info("🤖 TrixBot v5.0 starting...")
+    logger.info("🤖 TrixBot v5.0 OPTIMIZED starting...")
     print("\n" + "="*50)
-    print("🤖 TRIXBOT v5.0 IS READY!")
+    print("🤖 TRIXBOT v5.0 OPTIMIZED IS READY!")
     print("="*50)
+    print(f"⚡ Optimized modules: 5 (menu, publication, moderation, admin, piar)")
     print(f"📊 Stats interval: {Config.STATS_INTERVAL_HOURS}h")
     print(f"📢 Moderation: {Config.MODERATION_GROUP_ID}")
     print(f"🔧 Admin group: {Config.ADMIN_GROUP_ID}")
@@ -707,6 +768,14 @@ def main():
         print(f"💾 Database: ⚠️ Limited mode")
     
     print("="*50 + "\n")
+    
+    # Log callback prefixes info
+    logger.info("📋 Callback prefixes:")
+    logger.info(f"  Menu: mnc_ (e.g. {MENU_CALLBACKS['write']})")
+    logger.info(f"  Publication: pbc_ (e.g. {PUB_CALLBACKS['preview']})")
+    logger.info(f"  Moderation: mdc_ (e.g. {MOD_CALLBACKS['approve']})")
+    logger.info(f"  Admin: adc_ (e.g. {ADMIN_CALLBACKS['stats']})")
+    logger.info(f"  Piar: prc_ (e.g. {PIAR_CALLBACKS['preview']})")
     
     try:
         application.run_polling(
@@ -740,7 +809,7 @@ def main():
         except Exception as loop_error:
             logger.error(f"Error closing loop: {loop_error}")
         
-        print("\n👋 TrixBot v5.0 stopped")
+        print("\n👋 TrixBot v5.0 OPTIMIZED stopped")
 
 if __name__ == '__main__':
     main()
