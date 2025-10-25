@@ -428,10 +428,9 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
             
         if waiting_for == 'rate_age':
-       from handlers.rating_handler import handle_rate_age
-       await handle_rate_age(update, context)
-       return
-        
+           from handlers.rating_handler import handle_rate_age
+           await handle_rate_age(update, context)
+           return
         # Media for posts
         if update.message.photo or update.message.video or update.message.document:
             await handle_media_input(update, context)
