@@ -1,4 +1,4 @@
-# handlers/__init__.py - УПРОЩЕННАЯ ВЕРСИЯ 3.0
+# handlers/__init__.py - ВЕРСИЯ 5.0 С CATALOG_SERVICE v5.0
 
 from .start_handler import start_command, help_command, show_main_menu, show_write_menu
 from .menu_handler import handle_menu_callback
@@ -46,38 +46,60 @@ from .advanced_moderation import (
 from .admin_handler import (
     admin_command, 
     say_command, 
-    handle_admin_callback
+    handle_admin_callback,
+    broadcast_command,
+    sendstats_command
 )
 from .autopost_handler import (
     autopost_command, 
     autopost_test_command
 )
 
-# ============= КАТАЛОГ - ВЕРСИЯ 3.0 (УПРОЩЕННАЯ) =============
+# ============= RATING (TOPPEOPLE) - ВЕРСИЯ 5.0 =============
+from .rating_handler import (
+    itsme_command,
+    toppeople_command,
+    topboys_command,
+    topgirls_command,
+    toppeoplereset_command,
+    handle_rate_callback,
+    handle_rate_moderation_callback,
+    handle_rate_photo,
+    handle_rate_age,
+    handle_rate_name,
+    handle_rate_about,
+    handle_rate_profile
+)
+
+# ============= КАТАЛОГ - ВЕРСИЯ 5.0 =============
 from .catalog_handler import (
     # Основные команды
     catalog_command,
     search_command,
     addtocatalog_command,
     review_command,
-    categoryfollow_command,              # ← НОВАЯ КОМАНДА (заменяет mysubscriptions)
+    categoryfollow_command,
     
     # Админские команды
     catalogpriority_command,
     addcatalogreklama_command,
     edit_catalog_command,
     remove_catalog_command,
+    change_catalog_number_command,
     addgirltocat_command,
     addboytocat_command,
     
     # Статистика
-    catalogview_command,                 # ← НОВАЯ КОМАНДА (уникальные пользователи)
+    catalogview_command,
     catalogviews_command,
     catalog_stats_users_command,
     catalog_stats_categories_command,
     catalog_stats_popular_command,
     catalog_stats_priority_command,
     catalog_stats_reklama_command,
+    admincataloginfo_command,
+    catalogads_command,
+    removeads_command,
     
     # Handlers
     handle_catalog_callback,
@@ -116,6 +138,24 @@ from .stats_commands import (
 from .help_commands import trix_command, handle_trix_callback
 from .social_handler import social_command, giveaway_command
 from .bonus_handler import bonus_command
+from .giveaway_handler import (
+    giveaway_command,
+    handle_giveaway_callback,
+    p2p_command
+)
+from .trixticket_handler import (
+    tickets_command,
+    myticket_command,
+    trixtickets_command,
+    handle_trixticket_callback,
+    givett_command,
+    removett_command,
+    userstt_command,
+    trixticketstart_command,
+    ttrenumber_command,
+    ttsave_command,
+    trixticketclear_command
+)
 
 __all__ = [
     # Start
@@ -137,7 +177,7 @@ __all__ = [
     'handle_piar_text',
     'handle_piar_photo',
     
-    # Moderation (UNIFIED)
+    # Moderation
     'handle_moderation_callback',
     'handle_moderation_text',
     'ban_command',
@@ -176,35 +216,53 @@ __all__ = [
     'admin_command',
     'say_command',
     'handle_admin_callback',
+    'broadcast_command',
+    'sendstats_command',
     
     # Autopost
     'autopost_command',
     'autopost_test_command',
     
-    # Catalog - ВЕРСИЯ 3.0
+    # Rating (TopPeople) - v5.0
+    'itsme_command',
+    'toppeople_command',
+    'topboys_command',
+    'topgirls_command',
+    'toppeoplereset_command',
+    'handle_rate_callback',
+    'handle_rate_moderation_callback',
+    'handle_rate_photo',
+    'handle_rate_age',
+    'handle_rate_name',
+    'handle_rate_about',
+    'handle_rate_profile',
+    
+    # Catalog - v5.0
     'catalog_command',
     'search_command',
     'addtocatalog_command',
     'review_command',
-    'categoryfollow_command',           # ← НОВАЯ
+    'categoryfollow_command',
     'catalogpriority_command',
     'addcatalogreklama_command',
     'edit_catalog_command',
     'remove_catalog_command',
-    'catalogview_command',              # ← НОВАЯ
+    'change_catalog_number_command',
+    'addgirltocat_command',
+    'addboytocat_command',
+    'catalogview_command',
     'catalogviews_command',
     'catalog_stats_users_command',
     'catalog_stats_categories_command',
     'catalog_stats_popular_command',
     'catalog_stats_priority_command',
     'catalog_stats_reklama_command',
-    'handle_catalog_callback',
-    'handle_catalog_text',
-    'handle_catalog_media',
     'admincataloginfo_command',
     'catalogads_command',
     'removeads_command',
-    
+    'handle_catalog_callback',
+    'handle_catalog_text',
+    'handle_catalog_media',
     
     # Games
     'wordadd_command',
@@ -247,4 +305,21 @@ __all__ = [
     
     # Bonus
     'bonus_command',
+    
+    # Giveaway
+    'handle_giveaway_callback',
+    'p2p_command',
+    
+    # TrixTicket
+    'tickets_command',
+    'myticket_command',
+    'trixtickets_command',
+    'handle_trixticket_callback',
+    'givett_command',
+    'removett_command',
+    'userstt_command',
+    'trixticketstart_command',
+    'ttrenumber_command',
+    'ttsave_command',
+    'trixticketclear_command',
 ]
