@@ -9,22 +9,22 @@ async def social_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Показать социальные сети TRIX"""
     
     keyboard = [
-        [InlineKeyboardButton("🧢 Instagram", url="https://www.instagram.com/budapesttrix?igsh=ZXlrNmo4NDdyN2Vz&utm_source=qr")],
-        [InlineKeyboardButton("💙 Facebook Group", url="https://www.facebook.com/share/g/1EKwURtZ13/?mibextid=wwXIfr")],
-        [InlineKeyboardButton("🌀 Threads", url="https://www.threads.com/@budapesttrix?igshid=NTc4MTIwNjQ2YQ==")],
-        [InlineKeyboardButton("💎 Telegram DM", url="https://t.me/trixilvebot")],
-        [InlineKeyboardButton("↩️ Главное меню", callback_data="menu:back")]
+        [InlineKeyboardButton("🟧 INSTAGRAM", url="https://www.instagram.com/budapesttrix?igsh=ZXlrNmo4NDdyN2Vz&utm_source=qr")],
+        [InlineKeyboardButton("📘 FACEBOOK", url="https://www.facebook.com/share/g/1EKwURtZ13/?mibextid=wwXIfr")],
+        [InlineKeyboardButton("🧵 THREADS", url="https://www.threads.com/@budapesttrix?igshid=NTc4MTIwNjQ2YQ==")],
+        [InlineKeyboardButton("🌀 TELEGRAM", url="https://t.me/trixilvebot")],
+        [InlineKeyboardButton("▫️ MENU", callback_data="menu:back")]
     ]
     
     text = (
-        "🪞 **СОЦИАЛЬНЫЕ СЕТИ TRIX**\n\n"
-        "Присоединяйтесь к нам в социальных сетях:\n\n"
+        "⚡️ **СОЦИАЛЬНЫЕ СЕТИ TRIX**\n\n"
+        "✅ Follow:\n\n"
         
-        "🧢 **Instagram** — фото, stories, актуальные новости (@budapesttrix)\n\n"
-        "🔷 **Facebook Group** — обсуждения, мероприятия, знакомства\n\n"
-        "🌀 **Threads** — короткие посты и общение (@budapesttrix)\n\n"
-        "💎 **Telegram DM** — личная связь с администрацией\n\n"
-        "🔦 Нажмите на кнопку чтобы перейти"
+        "🟧 **INSTAGRAM** — фото, stories, актуальные новости (@budapesttrix)\n\n"
+        "📘 **FACEBOOK** — дублирование телеграм контента\n\n"
+        "🧵 **THREADS** — короткие посты и общение (@budapesttrix)\n\n"
+        "🌀 **TELEGRAM** — личная связь с администрацией\n\n"
+        "🔘 Нажмите на кнопку для просмотра"
     )
     
     await update.message.reply_text(
