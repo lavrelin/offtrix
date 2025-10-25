@@ -1,13 +1,3 @@
-# -*- coding: utf-8 -*-
-"""
-Catalog Handler - ULTRA OPTIMIZED v8.0
-✅ Лимит 1 отзыв на 1 карточку НАВСЕГДА
-✅ Кулдаун 8 часов на ВСЕ отзывы (используя cooldown_service)
-✅ Постоянные кнопки навигации внизу
-✅ Уникальные префиксы: ctpc_ (catalog public)
-✅ Исправлен Markdown парсинг
-✅ Поддержка Instagram с UTM-параметрами
-"""
 import logging
 import re
 from typing import Optional, Dict
