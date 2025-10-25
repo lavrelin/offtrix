@@ -167,7 +167,7 @@ async def send_catalog_post(bot: Bot, chat_id: int, post: Dict, index: int, tota
         tags = post.get('tags', [])
         if tags and isinstance(tags, list):
             clean_tags = [f"#{re.sub(r'[^\w\-]', '', str(tag).replace(' ', '_'))}" 
-                         for tag in tags[:5] if tag]
+                         text = f"Теги: {[tag for tag in tags[:5] if tag]}
             if clean_tags:
                 card_text += f"{' '.join(clean_tags)}\n"
         
