@@ -5,7 +5,6 @@ from .start_handler import start_command,
 show_main_menu, show_write_menu
 )
 from .menu_handler import handle_menu_callback
-)
 from .publication_handler import (
     handle_publication_callback, 
     handle_text_input, 
