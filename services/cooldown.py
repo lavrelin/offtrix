@@ -129,10 +129,26 @@ class CooldownService:
         duration: int,
         cooldown_type: CooldownType = CooldownType.NORMAL
     ) -> Tuple[bool, int]:
-        """
-        Проверка кулдауна
-        Returns: (can_use: bool, remaining_seconds: int)
-        """
+        # Проверка лимита на карточку
+if check_user_reviewed_post(user_id, post_id):
+    return "❌ Вы уже оставили отзыв"
+
+# Проверка кулдауна
+    can_review, remaining = await cooldown_service.check_cooldown(
+        user_id=user_id,
+        command='review',
+        duration=8 * 3600,
+        cooldown_type=CooldownType.NORMAL
+    )
+
+# После успешного отзыва
+    mark_post_as_reviewed(user_id, post_id)
+    await cooldown_service.set_cooldown(
+        user_id=user_id,
+        command='review',
+        duration=8 * 3600,
+        cooldown_type=CooldownType.NORMAL
+    )
         try:
             # Модераторы всегда могут использовать
             if Config.is_moderator(user_id):
