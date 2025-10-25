@@ -22,9 +22,9 @@ async def bonus_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         "**Crypto:**\n\n"
         
-        "💲 **STAKE** Crypto Gambling\n"
-        "max RTP96% ➕"
-        "Моментальный вывод, weekly, monthly bonus"
+        "💲 **STAKE** top Crypto Gambling\n"
+        "max RTP96% ➕\n"
+        "Моментальный вывод, weekly, monthly bonus\n""
         "Ставки, казино, слоты - бонус рег, кешбек\n\n
         
         "🟨 **BINANCE**\n"
