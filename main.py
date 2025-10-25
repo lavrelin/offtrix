@@ -31,7 +31,7 @@ from handlers.rating_handler import (
     topgirls_command, toppeoplereset_command, handle_rate_callback,
     handle_rate_moderation_callback,
     handle_rate_photo,
-    handle_rate_age, ← ДОБАВЬТЕ
+    handle_rate_age,
     handle_rate_profile   # ← ДОБАВЬТЕ
 )
 from handlers.profile_handler import handle_profile_callback
