@@ -1,7 +1,10 @@
-
 # -*- coding: utf-8 -*-
 """
-Сервис для работы с каталогом услуг - ПОЛНАЯ ВЕРСИЯ 4.0
+Сервис для работы с каталогом услуг - ПОЛНАЯ ВЕРСИЯ 4.1
+
+Новое в v4.1:
+- ✅ Добавлены методы set_post_as_ad и remove_ad_by_number
+- ✅ Улучшенное управление рекламными постами
 
 Новое в v4.0:
 - ✅ Добавлены категории TopGirl и TopBoy
@@ -11,8 +14,8 @@
 - ✅ Смешанная выдача каталога (4 обычных + 1 Top)
 - ✅ Импорт рейтинга из rating_handler для Top постов
 
-Версия: 4.0.0
-Дата: 24.10.2025
+Версия: 4.1.0
+Дата: 25.10.2025
 """
 import logging
 import random
@@ -57,7 +60,7 @@ CATALOG_CATEGORIES = {
 
 
 class CatalogService:
-    """Сервис для работы с каталогом услуг - ВЕРСИЯ 4.0"""
+    """Сервис для работы с каталогом услуг - ВЕРСИЯ 4.1"""
     
     def __init__(self):
         self.max_posts_per_page = 5
@@ -1266,6 +1269,58 @@ class CatalogService:
         except Exception as e:
             logger.error(f"Error adding ad post: {e}")
             return None
+    
+    async def set_post_as_ad(self, post_id: int) -> bool:
+        """Сделать пост рекламным"""
+        try:
+            async with db.get_session() as session:
+                result = await session.execute(
+                    select(CatalogPost).where(CatalogPost.id == post_id)
+                )
+                post = result.scalar_one_or_none()
+                
+                if not post:
+                    logger.warning(f"Post {post_id} not found")
+                    return False
+                
+                post.is_ad = True
+                post.ad_frequency = self.ad_frequency
+                post.updated_at = datetime.utcnow()
+                
+                await session.commit()
+                
+                logger.info(f"Set post {post_id} (#{post.catalog_number}) as ad")
+                return True
+                
+        except Exception as e:
+            logger.error(f"Error setting post as ad: {e}")
+            return False
+    
+    async def remove_ad_by_number(self, catalog_number: int) -> bool:
+        """Удалить рекламу с поста по номеру"""
+        try:
+            async with db.get_session() as session:
+                result = await session.execute(
+                    select(CatalogPost).where(CatalogPost.catalog_number == catalog_number)
+                )
+                post = result.scalar_one_or_none()
+                
+                if not post or not post.is_ad:
+                    logger.warning(f"Post #{catalog_number} not found or is not an ad")
+                    return False
+                
+                post.is_ad = False
+                post.ad_frequency = None
+                post.updated_at = datetime.utcnow()
+                
+                await session.commit()
+                
+                logger.info(f"Removed ad from post {post.id} (#{catalog_number})")
+                return True
+                
+        except Exception as e:
+            logger.error(f"Error removing ad: {e}")
+            return False
     
     async def get_user_posts(self, user_id: int) -> List[Dict]:
         """Получить все посты пользователя"""
