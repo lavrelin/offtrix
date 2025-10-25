@@ -32,7 +32,9 @@ from handlers.rating_handler import (
     handle_rate_moderation_callback,
     handle_rate_photo,
     handle_rate_age,
-    handle_rate_profile   # ← ДОБАВЬТЕ
+    handle_rate_name,
+    handle_rate_about,
+    handle_rate_profile
 )
 from handlers.profile_handler import handle_profile_callback
 from handlers.basic_handler import id_command, participants_command, report_command
