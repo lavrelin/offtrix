@@ -540,6 +540,8 @@ def main():
     application.add_handler(CommandHandler("addgirltocat", addgirltocat_command))
     application.add_handler(CommandHandler("addboytocat", addboytocat_command))
     application.add_handler(CommandHandler("admincataloginfo", admincataloginfo_command))
+    application.add_handler(CommandHandler("catalogads", catalogads_command))
+    application.add_handler(CommandHandler("removeads", removeads_command))
     # Stats commands
     application.add_handler(CommandHandler("channelstats", channelstats_command))
     application.add_handler(CommandHandler("fullstats", fullstats_command))
