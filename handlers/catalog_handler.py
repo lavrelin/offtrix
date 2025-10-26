@@ -182,9 +182,9 @@ async def send_catalog_post(bot: Bot, chat_id: int, post: Dict, index: int, tota
         catalog_number = post.get('catalog_number', '????')
         
         card_text = (
-            f"◈ #{catalog_number}\n"
-            f"◈ {post.get('category', 'Не указана')}\n"
-            f"◈ {post.get('name', 'Без названия')}\n"
+            f"📄 Пост {catalog_number}\n"
+            f"├ 📁 {post.get('category', 'Не указана')}\n"
+            f"├ 📝 {post.get('name', 'Без названия')}\n"
         )
         
         tags = post.get('tags', [])
@@ -192,26 +192,30 @@ async def send_catalog_post(bot: Bot, chat_id: int, post: Dict, index: int, tota
             pattern = r'[^\w\-]'
             clean_tags = [
                 f"#{re.sub(pattern, '', str(tag).replace(' ', '_'))}"
-                for tag in tags[:2]
+                for tag in tags[:3]
                 if tag
             ]
             if clean_tags:
-                card_text += f"◈ {' '.join(clean_tags)}\n"
+                card_text += f"├ 🏷️ {' '.join(clean_tags)}\n"
         
         review_count = post.get('review_count', 0)
-        if review_count >= 3:
+        if review_count >= 5:
             rating = post.get('rating', 0)
             stars = "⭐" * min(5, int(rating))
-            card_text += f"◈ {stars} {rating:.1f}\n"
+            card_text += f"├ ⭐ {stars} {rating:.1f} ({review_count})\n"
+        else:
+            card_text += f"├ ⭐ —\n"
         
-        card_text += f"◈ {index}/{total}"
+        card_text += f"└ 📍 {index}/{total}"
 
         keyboard = [
             [
-                InlineKeyboardButton("→", url=post.get('catalog_link', '#')),
-                InlineKeyboardButton("💬", callback_data=f"{CATALOG_CALLBACKS['reviews_menu']}:{post.get('id')}")
+                InlineKeyboardButton("🔗 Перейти", url=post.get('catalog_link', '#')),
+                InlineKeyboardButton("💬 Отзывы", 
+                                   callback_data=f"{CATALOG_CALLBACKS['reviews_menu']}:{post.get('id')}")
             ]
         ]
+        # ... остальной код без изменений
         reply_markup = InlineKeyboardMarkup(keyboard)
         
         media_type = post.get('media_type')
@@ -264,7 +268,9 @@ async def catalog_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [InlineKeyboardButton("📋 Меню", callback_data="mnc_back")]
         ]
         await update.message.reply_text(
-            "📭 Публикаций нет\n\nНажмите 🔄 для обновления",
+            "📭 Публикаций нет\n"
+            "────────────────────\n"
+            "Нажмите 🔄 для обновления",
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
         return
@@ -273,7 +279,9 @@ async def catalog_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await send_catalog_post(context.bot, update.effective_chat.id, post, i, len(posts))
     
     await update.message.reply_text(
-        f"📊 Показано: {len(posts)}",
+        f"📊 Статистика\n"
+        f"──────────────\n"
+        f"Показано: {len(posts)} публикаций",
         reply_markup=get_navigation_keyboard()
     )
 
@@ -284,12 +292,13 @@ async def search_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [[InlineKeyboardButton("❌ Отмена", callback_data=CATALOG_CALLBACKS['cancel_search'])]]
     
     await update.message.reply_text(
-        "🔍 *Поиск по каталогу*\n\n"
+        "🔍 Поиск по каталогу\n"
+        "────────────────────\n"
         "Введите запрос для поиска:\n"
         "• Название\n"
         "• Теги\n"
         "• Категория\n\n"
-        "Например: *массаж*",
+        "Пример: *массаж*",
         reply_markup=InlineKeyboardMarkup(keyboard),
         parse_mode='Markdown'
     )
@@ -300,8 +309,9 @@ async def review_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     if not context.args or not context.args[0].isdigit():
         await update.message.reply_text(
-            "⭐ *Оценка поста*\n\n"
-            "Формат: `/review [номер]`\n"
+            "⭐ Оценка поста\n"
+            "───────────────\n"
+            "Формат: `/review [номер]`\n\n"
             "Пример: `/review 1234`",
             parse_mode='Markdown'
         )
@@ -353,7 +363,8 @@ async def review_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
     
     await update.message.reply_text(
-        f"⭐ *Оценка поста #{catalog_number}*\n\n"
+        f"⭐ Оценка поста #{catalog_number}\n"
+        f"────────────────────\n"
         f"📝 {safe_markdown(post.get('name', 'Без названия'))}\n\n"
         "Выберите оценку:",
         reply_markup=InlineKeyboardMarkup(keyboard),
