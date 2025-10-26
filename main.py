@@ -89,6 +89,7 @@ from services.admin_notifications import admin_notifications
 from services.stats_scheduler import stats_scheduler
 from services.channel_stats import channel_stats
 from services.cooldown import cooldown_service
+from services.join_handlers import handle_join_callback
 from services.db import db
 
 load_dotenv()
