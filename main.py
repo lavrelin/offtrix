@@ -44,7 +44,8 @@ from handlers.join_handler import (
     join_citypartners_command,
     join_budapesocial_command,
     join_menu_command,
-    start_command,  # ← ИСПРАВЛЕНО: было start_join_command
+    start_bot_command,
+    start_track_command,
     groupstats_command,
     handle_join_callback
 )
@@ -353,6 +354,8 @@ def main():
     application.add_handler(CommandHandler("trixlinks", trixlinks_command, filters=budapest_filter))
     
      # JOIN / INVITE admin commands (added)
+    application.add_handler(CommandHandler("start", start_bot_command, filters=budapest_filter))
+    application.add_handler(CommandHandler("start_track", start_track_command, filters=budapest_filter))
     application.add_handler(CommandHandler("chat_join", chat_join_command, filters=budapest_filter))
     application.add_handler(CommandHandler("public_join", public_join_command, filters=budapest_filter))
     application.add_handler(CommandHandler("catalog_join", catalog_join_command, filters=budapest_filter))
@@ -361,8 +364,8 @@ def main():
     application.add_handler(CommandHandler("join_citypartners", join_citypartners_command, filters=budapest_filter))
     application.add_handler(CommandHandler("join_budapesocial", join_budapesocial_command, filters=budapest_filter))
     application.add_handler(CommandHandler("join", join_menu_command, filters=budapest_filter))
-    application.add_handler(CommandHandler("start", start_command, filters=budapest_filter))  # ← ИСПРАВЛЕНО
     application.add_handler(CommandHandler("groupstats", groupstats_command, filters=budapest_filter))
+
     # Rating commands
     application.add_handler(CommandHandler("itsme", itsme_command, filters=budapest_filter))
     application.add_handler(CommandHandler("toppeople", toppeople_command, filters=budapest_filter))
