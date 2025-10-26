@@ -1,12 +1,3 @@
-# -*- coding: utf-8 -*-
-"""
-Cooldown Service v2.0 - Расширенная система кулдаунов
-- Декораторы для команд
-- Разные типы кулдаунов (обычные, ежедневные, недельные, глобальные)
-- Сохранение в БД
-- Логирование использования
-- Автоматическая очистка
-"""
 from datetime import datetime, timedelta
 from services.db import db
 from models import User
