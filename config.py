@@ -19,7 +19,7 @@ class Config:
     # Основные каналы
     TARGET_CHANNEL_ID = int(os.getenv("TARGET_CHANNEL_ID", "-1002743668534"))
     MODERATION_GROUP_ID = int(os.getenv("MODERATION_GROUP_ID", "-1002734837434"))
-    ADMIN_GROUP_ID = int(os.getenv("ADMIN_GROUP_ID", "-4843909295"))
+    ADMIN_GROUP_ID = int(os.getenv("XXXADMDBGROUP", "-1003039151203"))
     CHAT_FOR_ACTUAL = int(os.getenv("CHAT_FOR_ACTUAL", "-1002734837434"))
     BUDAPEST_CHAT_ID = int(os.getenv("BUDAPEST_CHAT_ID", "-1002883770818"))
     CATALOG_CHANNEL_ID = int(os.getenv("CATALOG_CHANNEL_ID", "-1002601716810"))
