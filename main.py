@@ -34,9 +34,10 @@ from handlers.admin_handler import (
 )
 
 # ============= JOIN HANDLERS (ADDED) =============
+# В main.py исправьте импорты:
 from handlers.join_handler import (
     chat_join_command,
-    public_join_command,
+    public_join_command, 
     catalog_join_command,
     marketplace_join_command,
     join_citytoppeople_command,
@@ -44,7 +45,8 @@ from handlers.join_handler import (
     join_budapesocial_command,
     join_menu_command,
     start_command,
-    groupstats_command
+    groupstats_command,
+    handle_join_callback
 )
 
 # ============= РАСШИРЕННЫЕ HANDLERS =============
