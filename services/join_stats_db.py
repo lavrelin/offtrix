@@ -1,72 +1,74 @@
-# services/join_stats_db.py
-# Асинхронный сервис для хранения/получения статистики переходов через базу данных (JoinStat model)
 import logging
 from datetime import datetime
-from typing import Dict
-
 from sqlalchemy import select
-from sqlalchemy.exc import SQLAlchemyError
-
 from services.db import db
-from models import JoinStat
+from models import JoinStat, JoinStatUser
 
 logger = logging.getLogger(__name__)
 
-async def increment(key: str) -> int:
+async def register_join_user(key: str, user_id: int) -> bool:
     """
-    Увеличить счётчик для ключа и вернуть новое значение.
-    Создаёт запись если не существует.
+    Засчитать уникальный переход user_id к группе key.
+    Возвращает True, если засчитан впервые; False, если уже был.
     """
-    try:
-        # Убедимся, что DB инициализирован
-        await db.init()
-        async with db.get_session() as session:
-            # Попробуем получить запись
-            result = await session.execute(select(JoinStat).where(JoinStat.key == key))
-            stat = result.scalar_one_or_none()
-            if stat:
-                stat.count = (stat.count or 0) + 1
-                stat.last_updated = datetime.utcnow()
-                session.add(stat)
-                await session.commit()
-                return int(stat.count)
-            else:
-                stat = JoinStat(key=key, count=1, last_updated=datetime.utcnow())
-                session.add(stat)
-                await session.commit()
-                # refresh to load generated fields
-                try:
-                    await session.refresh(stat)
-                except Exception:
-                    pass
-                return int(stat.count)
-    except SQLAlchemyError as e:
-        logger.error(f"DB error in join_stats.increment: {e}", exc_info=True)
-        raise
-    except Exception as e:
-        logger.error(f"Unexpected error in join_stats.increment: {e}", exc_info=True)
-        raise
+    await db.init()
+    async with db.get_session() as session:
+        exists = await session.execute(
+            select(JoinStatUser).where(
+                JoinStatUser.key == key,
+                JoinStatUser.user_id == user_id
+            )
+        )
+        row = exists.scalar_one_or_none()
+        if row:
+            return False  # Уже был
 
-async def get(key: str) -> int:
-    """Вернуть текущее значение счётчика для ключа (0 если нет)"""
-    try:
-        await db.init()
-        async with db.get_session() as session:
-            result = await session.execute(select(JoinStat).where(JoinStat.key == key))
-            stat = result.scalar_one_or_none()
-            return int(stat.count) if stat else 0
-    except Exception as e:
-        logger.error(f"Error getting join_stat for key={key}: {e}", exc_info=True)
-        return 0
+        session.add(JoinStatUser(key=key, user_id=user_id, created_at=datetime.utcnow()))
+        stat = await session.execute(select(JoinStat).where(JoinStat.key == key))
+        stat_obj = stat.scalar_one_or_none()
+        if stat_obj:
+            stat_obj.count = (stat_obj.count or 0) + 1
+            stat_obj.last_updated = datetime.utcnow()
+            session.add(stat_obj)
+        else:
+            session.add(JoinStat(key=key, count=1, last_updated=datetime.utcnow()))
+        await session.commit()
+        return True
 
-async def get_all() -> Dict[str, int]:
-    """Вернуть словарь {key: count} для всех записей"""
-    try:
-        await db.init()
-        async with db.get_session() as session:
-            result = await session.execute(select(JoinStat))
-            rows = result.scalars().all()
-            return {row.key: int(row.count or 0) for row in rows}
-    except Exception as e:
-        logger.error(f"Error getting all join_stats: {e}", exc_info=True)
-        return {}
+async def has_user_joined(key: str, user_id: int) -> bool:
+    """
+    Проверяет, был ли user_id уже засчитан для данной группы key.
+    """
+    await db.init()
+    async with db.get_session() as session:
+        result = await session.execute(
+            select(JoinStatUser).where(
+                JoinStatUser.key == key,
+                JoinStatUser.user_id == user_id
+            )
+        )
+        return bool(result.scalar_one_or_none())
+
+async def get_join_count(key: str) -> int:
+    """
+    Сколько уникальных пользователей засчитано для группы key.
+    """
+    await db.init()
+    async with db.get_session() as session:
+        result = await session.execute(
+            select(JoinStatUser).where(JoinStatUser.key == key)
+        )
+        return len(result.scalars().all())
+
+async def get_all_unique_counts() -> dict:
+    """
+    Словарь {key: count} для всех групп (уникальные пользователи).
+    """
+    await db.init()
+    async with db.get_session() as session:
+        result = await session.execute(select(JoinStatUser))
+        rows = result.scalars().all()
+        stats = {}
+        for row in rows:
+            stats.setdefault(row.key, set()).add(row.user_id)
+        return {k: len(v) for k, v in stats.items()}
