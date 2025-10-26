@@ -30,7 +30,7 @@ class CooldownService:
     
     # ============= ДЕКОРАТОРЫ =============
     
-       def cooldown(
+    def cooldown(
         self,
         seconds: int = None,
         cooldown_type: CooldownType = CooldownType.NORMAL,
