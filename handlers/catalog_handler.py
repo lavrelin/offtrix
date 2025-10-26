@@ -81,13 +81,12 @@ def get_navigation_keyboard() -> InlineKeyboardMarkup:
     """Получить постоянную клавиатуру навигации"""
     keyboard = [
         [
-            InlineKeyboardButton("🔀 Следующие 5", callback_data=CATALOG_CALLBACKS['next']),
-            InlineKeyboardButton("⏹️ Завершить", callback_data=CATALOG_CALLBACKS['finish'])
+            InlineKeyboardButton("➡️ Еще", callback_data=CATALOG_CALLBACKS['next']),
+            InlineKeyboardButton("⏹️ Стоп", callback_data=CATALOG_CALLBACKS['finish'])
         ],
         [InlineKeyboardButton("🔍 Поиск", callback_data=CATALOG_CALLBACKS['search'])]
     ]
     return InlineKeyboardMarkup(keyboard)
-
 # ============= MEDIA EXTRACTION =============
 
 async def extract_media_from_link(bot: Bot, telegram_link: str) -> Optional[Dict]:
@@ -183,9 +182,9 @@ async def send_catalog_post(bot: Bot, chat_id: int, post: Dict, index: int, tota
         catalog_number = post.get('catalog_number', '????')
         
         card_text = (
-            f"#️⃣ Пост {catalog_number}\n\n"
-            f"📂 {post.get('category', 'Не указана')}\n"
-            f"ℹ️ {post.get('name', 'Без названия')}\n\n"
+            f"📄 Пост {catalog_number}\n\n"
+            f"📁 {post.get('category', 'Не указана')}\n"
+            f"📝 {post.get('name', 'Без названия')}\n\n"
         )
         
         tags = post.get('tags', [])
@@ -197,20 +196,20 @@ async def send_catalog_post(bot: Bot, chat_id: int, post: Dict, index: int, tota
                 if tag
             ]
             if clean_tags:
-                card_text += f"Теги: {' '.join(clean_tags)}\n"
+                card_text += f"🏷️ {' '.join(clean_tags)}\n"
         
         review_count = post.get('review_count', 0)
-        if review_count >= 10:
+        if review_count >= 5:
             rating = post.get('rating', 0)
-            stars = "⭐" * int(rating)
-            card_text += f"Rating: {stars} {rating:.1f} ({review_count} отзывов)\n"
+            stars = "⭐" * min(5, int(rating))
+            card_text += f"⭐ {stars} {rating:.1f} ({review_count})\n"
         else:
-            card_text += "Rating: -\n"
+            card_text += "⭐ —\n"
         
         keyboard = [
             [
-                InlineKeyboardButton("➡️ Перейти", url=post.get('catalog_link', '#')),
-                InlineKeyboardButton("🧑‍🧒‍🧒 Отзывы", 
+                InlineKeyboardButton("🔗 Перейти", url=post.get('catalog_link', '#')),
+                InlineKeyboardButton("💬 Отзывы", 
                                    callback_data=f"{CATALOG_CALLBACKS['reviews_menu']}:{post.get('id')}")
             ]
         ]
