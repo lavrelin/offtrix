@@ -365,7 +365,7 @@ def main():
     application.add_handler(CommandHandler("join_budapesocial", join_budapesocial_command, filters=budapest_filter))
     application.add_handler(CommandHandler("join", join_menu_command, filters=budapest_filter))
     application.add_handler(CommandHandler("groupstats", groupstats_command, filters=budapest_filter))
-
+    application.add_handler(CallbackQueryHandler(handle_join_callback, pattern=r'^join_ack:'))
     # Rating commands
     application.add_handler(CommandHandler("itsme", itsme_command, filters=budapest_filter))
     application.add_handler(CommandHandler("toppeople", toppeople_command, filters=budapest_filter))
@@ -428,7 +428,6 @@ def main():
     application.add_handler(CommandHandler("trixticketclear", trixticketclear_command, filters=budapest_filter))
     # Callback handler BEFORE message handler (существующий)
     application.add_handler(CallbackQueryHandler(handle_all_callbacks))
-    application.add_handler(CallbackQueryHandler(handle_join_callback, pattern=r'^join_ack:'))
     # Message handler
     application.add_handler(MessageHandler(
         filters.TEXT | filters.PHOTO | filters.VIDEO | filters.Document.ALL,
