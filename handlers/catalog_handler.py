@@ -177,43 +177,42 @@ async def extract_media_from_link(bot: Bot, telegram_link: str) -> Optional[Dict
 # ============= SEND POST WITH MEDIA =============
 
 async def send_catalog_post(bot: Bot, chat_id: int, post: Dict, index: int, total: int) -> bool:
-    """Отправка карточки каталога"""
     try:
         catalog_number = post.get('catalog_number', '????')
         
         card_text = (
-            f"📄 Пост {catalog_number}\n\n"
-            f"📁 {post.get('category', 'Не указана')}\n"
-            f"📝 {post.get('name', 'Без названия')}\n\n"
+            f"┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓\n"
+            f"┃          🏷️ #{catalog_number}           ┃\n"
+            f"┣━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┫\n"
+            f"┃ 📂 {post.get('category', 'Не указана'):<25} ┃\n"
+            f"┃ 📝 {post.get('name', 'Без названия'):<25} ┃\n"
+            f"┣───────────────────────────────┫\n"
         )
         
         tags = post.get('tags', [])
-        if tags and isinstance(tags, list):
-            pattern = r'[^\w\-]'
-            clean_tags = [
-                f"#{re.sub(pattern, '', str(tag).replace(' ', '_'))}"
-                for tag in tags[:5]
-                if tag
-            ]
-            if clean_tags:
-                card_text += f"🏷️ {' '.join(clean_tags)}\n"
+        if tags:
+            clean_tags = [f"#{re.sub(r'[^\w\-]', '', str(tag).replace(' ', '_'))}" for tag in tags[:3]]
+            tags_line = ' '.join(clean_tags)
+            if len(tags_line) > 28: tags_line = tags_line[:25] + "..."
+            card_text += f"┃ 🏷️ {tags_line:<25} ┃\n"
         
         review_count = post.get('review_count', 0)
-        if review_count >= 5:
+        if review_count >= 3:
             rating = post.get('rating', 0)
             stars = "⭐" * min(5, int(rating))
-            card_text += f"⭐ {stars} {rating:.1f} ({review_count})\n"
+            card_text += f"┃ ⭐ {stars} {rating:.1f} ({review_count}){' ' * 10} ┃\n"
         else:
-            card_text += "⭐ —\n"
+            card_text += f"┃ ⭐ —{' ' * 25} ┃\n"
         
-        keyboard = [
-            [
-                InlineKeyboardButton("🔗 Перейти", url=post.get('catalog_link', '#')),
-                InlineKeyboardButton("💬 Отзывы", 
-                                   callback_data=f"{CATALOG_CALLBACKS['reviews_menu']}:{post.get('id')}")
-            ]
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
+        card_text += f"┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛\n"
+        card_text += f"📍 {index}/{total}"
+
+        keyboard = [[
+            InlineKeyboardButton("🌐 Перейти", url=post.get('catalog_link', '#')),
+            InlineKeyboardButton("💬 Отзывы", callback_data=f"{CATALOG_CALLBACKS['reviews_menu']}:{post.get('id')}")
+        ]]
+        
+        # Остальной код отправки без изменений...
         
         media_type = post.get('media_type')
         media_file_id = post.get('media_file_id')
