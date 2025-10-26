@@ -177,6 +177,7 @@ async def extract_media_from_link(bot: Bot, telegram_link: str) -> Optional[Dict
 # ============= SEND POST WITH MEDIA =============
 
 async def send_catalog_post(bot: Bot, chat_id: int, post: Dict, index: int, total: int) -> bool:
+    """Отправка карточки каталога"""
     try:
         catalog_number = post.get('catalog_number', '????')
         
@@ -187,25 +188,31 @@ async def send_catalog_post(bot: Bot, chat_id: int, post: Dict, index: int, tota
         )
         
         tags = post.get('tags', [])
-        if tags:
-            clean_tags = [f"#{re.sub(r'[^\w\-]', '', str(tag).replace(' ', '_'))}" for tag in tags[:2]]
-            card_text += f"◈ {' '.join(clean_tags)}\n"
+        if tags and isinstance(tags, list):
+            pattern = r'[^\w\-]'
+            clean_tags = [
+                f"#{re.sub(pattern, '', str(tag).replace(' ', '_'))}"
+                for tag in tags[:2]
+                if tag
+            ]
+            if clean_tags:
+                card_text += f"◈ {' '.join(clean_tags)}\n"
         
         review_count = post.get('review_count', 0)
         if review_count >= 3:
             rating = post.get('rating', 0)
-            card_text += f"◈ {'⭐' * min(5, int(rating))} {rating:.1f}\n"
+            stars = "⭐" * min(5, int(rating))
+            card_text += f"◈ {stars} {rating:.1f}\n"
         
         card_text += f"◈ {index}/{total}"
 
-        keyboard = [[
-            InlineKeyboardButton("→", url=post.get('catalog_link', '#')),
-            InlineKeyboardButton("💬", callback_data=f"{CATALOG_CALLBACKS['reviews_menu']}:{post.get('id')}")
-        ]]
-        
-        # Остальной код без изменений...
-        
-        # Остальной код отправки без изменений...
+        keyboard = [
+            [
+                InlineKeyboardButton("→", url=post.get('catalog_link', '#')),
+                InlineKeyboardButton("💬", callback_data=f"{CATALOG_CALLBACKS['reviews_menu']}:{post.get('id')}")
+            ]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
         
         media_type = post.get('media_type')
         media_file_id = post.get('media_file_id')
@@ -244,7 +251,6 @@ async def send_catalog_post(bot: Bot, chat_id: int, post: Dict, index: int, tota
     except Exception as e:
         logger.error(f"Error sending catalog post: {e}")
         return False
-
 # ============= COMMANDS =============
 
 async def catalog_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
