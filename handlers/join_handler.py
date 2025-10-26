@@ -1,10 +1,9 @@
 import logging
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes
-
 from config import Config
 from services.join_stats_db import (
-    register_join_user, has_user_joined, get_all_unique_counts
+    register_join_user, has_user_joined, get_join_count, get_all_unique_counts
 )
 
 logger = logging.getLogger(__name__)
@@ -13,51 +12,62 @@ GROUPS = {
     "chat": {
         "link": "tgchatxxx",
         "title": "🙅‍♀️ Будапешт - чат",
+        "desc": "Главный чат русскоязычной Будапешт-комьюнити.",
         "id": -1002919380244,
     },
     "public": {
         "link": "snghu",
         "title": "🙅‍♂️ Будапешт",
+        "desc": "Публикационный канал новостей и объявлений.",
         "id": -1002743668534,
     },
     "catalog": {
         "link": "catalogtrix",
         "title": "🙅 Каталог услуг Будапешт",
+        "desc": "Каталог услуг, мастеров, специалистов.",
         "id": -1002601716810,
     },
     "marketplace": {
         "link": "hungarytrade",
         "title": "🕵🏻‍♀️ Будапешт Куплю/Отдам/Продам",
+        "desc": "Маркетплейс венгерской комьюнити.",
         "id": -1003033694255,
     },
     "citytoppeople": {
         "link": "socialuck",
         "title": "🏆 Top Budapest 📱 Social 👩🏼‍❤️‍👨🏻 Люди Будапешт",
+        "desc": "Лучшие люди и знакомства города!",
         "id": -1003088023508,
     },
     "citypartners": {
         "link": "budapestpartners",
         "title": "Budapest 📳 Partners",
+        "desc": "Партнеры и бизнес-связи.",
         "id": -1003033694255,
     },
     "budapesocial": {
         "link": "budapesocial",
         "title": "BudaPes🦄",
+        "desc": "Социальный чат и обмен опытом.",
         "id": -1003114019170,
     },
 }
 
-def _get_btn(text, url):
-    return [InlineKeyboardButton(text, url=url)]
+def _is_admin(update: Update) -> bool:
+    user = update.effective_user
+    return bool(user and Config.is_admin(user.id))
 
-# ====== Одиночные хендлеры для каждой группы (без описания) ======
+# ====== Одиночные команды для каждого чата ======
 async def chat_join_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     group = GROUPS["chat"]
     link = f"https://t.me/{group['link']}?start={user_id}_chat"
-    keyboard = InlineKeyboardMarkup([_get_btn("🔗 Войти в чат", link)])
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton("🔗 Войти в чат", url=link)],
+        [InlineKeyboardButton("ℹ️ Описание", callback_data="join_desc:chat")]
+    ])
     await update.effective_message.reply_text(
-        f"{group['title']}",
+        f"{group['title']}\n\n{group['desc']}\n\nПереход автоматически засчитывается в статистике (уникально).",
         reply_markup=keyboard
     )
 
@@ -65,9 +75,12 @@ async def public_join_command(update: Update, context: ContextTypes.DEFAULT_TYPE
     user_id = update.effective_user.id
     group = GROUPS["public"]
     link = f"https://t.me/{group['link']}?start={user_id}_public"
-    keyboard = InlineKeyboardMarkup([_get_btn("🔗 Войти в канал", link)])
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton("🔗 Войти в канал", url=link)],
+        [InlineKeyboardButton("ℹ️ Описание", callback_data="join_desc:public")]
+    ])
     await update.effective_message.reply_text(
-        f"{group['title']}",
+        f"{group['title']}\n\n{group['desc']}\n\nПереход автоматически засчитывается в статистике (уникально).",
         reply_markup=keyboard
     )
 
@@ -75,9 +88,12 @@ async def catalog_join_command(update: Update, context: ContextTypes.DEFAULT_TYP
     user_id = update.effective_user.id
     group = GROUPS["catalog"]
     link = f"https://t.me/{group['link']}?start={user_id}_catalog"
-    keyboard = InlineKeyboardMarkup([_get_btn("🔗 Каталог услуг", link)])
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton("🔗 Каталог услуг", url=link)],
+        [InlineKeyboardButton("ℹ️ Описание", callback_data="join_desc:catalog")]
+    ])
     await update.effective_message.reply_text(
-        f"{group['title']}",
+        f"{group['title']}\n\n{group['desc']}\n\nПереход автоматически засчитывается в статистике (уникально).",
         reply_markup=keyboard
     )
 
@@ -85,9 +101,12 @@ async def marketplace_join_command(update: Update, context: ContextTypes.DEFAULT
     user_id = update.effective_user.id
     group = GROUPS["marketplace"]
     link = f"https://t.me/{group['link']}?start={user_id}_marketplace"
-    keyboard = InlineKeyboardMarkup([_get_btn("🔗 Маркетплейс", link)])
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton("🔗 Маркетплейс", url=link)],
+        [InlineKeyboardButton("ℹ️ Описание", callback_data="join_desc:marketplace")]
+    ])
     await update.effective_message.reply_text(
-        f"{group['title']}",
+        f"{group['title']}\n\n{group['desc']}\n\nПереход автоматически засчитывается в статистике (уникально).",
         reply_markup=keyboard
     )
 
@@ -95,9 +114,12 @@ async def join_citytoppeople_command(update: Update, context: ContextTypes.DEFAU
     user_id = update.effective_user.id
     group = GROUPS["citytoppeople"]
     link = f"https://t.me/{group['link']}?start={user_id}_citytoppeople"
-    keyboard = InlineKeyboardMarkup([_get_btn("🔗 Войти в топ-людей", link)])
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton("🔗 Войти в топ-людей", url=link)],
+        [InlineKeyboardButton("ℹ️ Описание", callback_data="join_desc:citytoppeople")]
+    ])
     await update.effective_message.reply_text(
-        f"{group['title']}",
+        f"{group['title']}\n\n{group['desc']}\n\nПереход автоматически засчитывается в статистике (уникально).",
         reply_markup=keyboard
     )
 
@@ -105,9 +127,12 @@ async def join_citypartners_command(update: Update, context: ContextTypes.DEFAUL
     user_id = update.effective_user.id
     group = GROUPS["citypartners"]
     link = f"https://t.me/{group['link']}?start={user_id}_citypartners"
-    keyboard = InlineKeyboardMarkup([_get_btn("🔗 Войти в партнеры", link)])
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton("🔗 Войти в партнеры", url=link)],
+        [InlineKeyboardButton("ℹ️ Описание", callback_data="join_desc:citypartners")]
+    ])
     await update.effective_message.reply_text(
-        f"{group['title']}",
+        f"{group['title']}\n\n{group['desc']}\n\nПереход автоматически засчитывается в статистике (уникально).",
         reply_markup=keyboard
     )
 
@@ -115,13 +140,16 @@ async def join_budapesocial_command(update: Update, context: ContextTypes.DEFAUL
     user_id = update.effective_user.id
     group = GROUPS["budapesocial"]
     link = f"https://t.me/{group['link']}?start={user_id}_budapesocial"
-    keyboard = InlineKeyboardMarkup([_get_btn("🔗 Войти в Budapesocial", link)])
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton("🔗 Войти в Budapesocial", url=link)],
+        [InlineKeyboardButton("ℹ️ Описание", callback_data="join_desc:budapesocial")]
+    ])
     await update.effective_message.reply_text(
-        f"{group['title']}",
+        f"{group['title']}\n\n{group['desc']}\n\nПереход автоматически засчитывается в статистике (уникально).",
         reply_markup=keyboard
     )
 
-# ====== Менюшка /join без описаний ======
+# ====== Красивая менюшка /join ======
 async def join_menu_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     stats = await get_all_unique_counts()
@@ -134,12 +162,36 @@ async def join_menu_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         join_btn = InlineKeyboardButton(
             f"🔗 Войти", url=f"https://t.me/{group['link']}?start={user_id}_{key}"
         )
-        keyboard.append([join_btn])
+        desc_btn = InlineKeyboardButton(
+            "ℹ️ Описание", callback_data=f"join_desc:{key}"
+        )
+        keyboard.append([join_btn, desc_btn])
     markup = InlineKeyboardMarkup(keyboard)
     await update.effective_message.reply_text(
         text,
         reply_markup=markup,
         parse_mode="HTML"
+    )
+
+# ====== Описание для callback ======
+async def handle_desc_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    if not query or not query.data.startswith("join_desc:"):
+        return
+    key = query.data.split(":", 1)[1]
+    group = GROUPS.get(key)
+    if not group:
+        await query.answer("❌ Группа не найдена", show_alert=True)
+        return
+    await query.answer()
+    desc = group.get("desc", "Нет описания.")
+    text = (
+        f"<b>{group['title']}</b>\n"
+        f"{desc}\n\n"
+        f"Ссылка: <a href='https://t.me/{group['link']}?start={query.from_user.id}_{key}'>Войти в группу</a>"
+    )
+    await query.edit_message_text(
+        text, parse_mode="HTML", disable_web_page_preview=True
     )
 
 # ====== /start с параметром для учёта перехода ======
@@ -176,16 +228,3 @@ async def groupstats_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
         count = stats.get(key, 0)
         text += f"{group['title']}: {count} уникальных переход(ов)\n"
     await update.effective_message.reply_text(text)
-
-# ====== CALLBACK HANDLER ДЛЯ ПОДТВЕРЖДЕНИЯ ВСТУПЛЕНИЯ ======
-async def handle_join_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Обработчик callback для подтверждения вступления в группы"""
-    query = update.callback_query
-    await query.answer()
-    
-    try:
-        # Простая заглушка
-        await query.edit_message_text("✅ Спасибо за подтверждение вступления!")
-    except Exception as e:
-        logger.error(f"Error in handle_join_callback: {e}")
-        await query.edit_message_text("❌ Произошла ошибка при обработке подтверждения")
