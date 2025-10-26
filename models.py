@@ -129,3 +129,20 @@ class CatalogSession(Base):
     favorites = Column(JSON, default=[])
     last_activity = Column(DateTime, default=datetime.utcnow)
     session_active = Column(Boolean, default=True)
+
+
+# ============= НОВАЯ ТАБЛИЦА: СТАТИСТИКА ПЕРЕХОДОВ ПО JOIN-ССЫЛКАМ =============
+class JoinStat(Base):
+    """
+    Хранит счётчики нажатий кнопки "Я перешёл" для разных ссылок/групп.
+    key: строковой идентификатор (например, 'chat', 'public', 'catalog' и т.д.)
+    count: общее количество отметок
+    last_updated: время последнего обновления счётчика
+    """
+    __tablename__ = 'join_stats'
+    
+    id = Column(Integer, primary_key=True)
+    key = Column(String(100), unique=True, nullable=False, index=True)
+    count = Column(Integer, default=0, nullable=False)
+    last_updated = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.utcnow)
