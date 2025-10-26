@@ -181,36 +181,29 @@ async def send_catalog_post(bot: Bot, chat_id: int, post: Dict, index: int, tota
         catalog_number = post.get('catalog_number', '????')
         
         card_text = (
-            f"┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓\n"
-            f"┃          🏷️ #{catalog_number}           ┃\n"
-            f"┣━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┫\n"
-            f"┃ 📂 {post.get('category', 'Не указана'):<25} ┃\n"
-            f"┃ 📝 {post.get('name', 'Без названия'):<25} ┃\n"
-            f"┣───────────────────────────────┫\n"
+            f"◈ #{catalog_number}\n"
+            f"◈ {post.get('category', 'Не указана')}\n"
+            f"◈ {post.get('name', 'Без названия')}\n"
         )
         
         tags = post.get('tags', [])
         if tags:
-            clean_tags = [f"#{re.sub(r'[^\w\-]', '', str(tag).replace(' ', '_'))}" for tag in tags[:3]]
-            tags_line = ' '.join(clean_tags)
-            if len(tags_line) > 28: tags_line = tags_line[:25] + "..."
-            card_text += f"┃ 🏷️ {tags_line:<25} ┃\n"
+            clean_tags = [f"#{re.sub(r'[^\w\-]', '', str(tag).replace(' ', '_'))}" for tag in tags[:2]]
+            card_text += f"◈ {' '.join(clean_tags)}\n"
         
         review_count = post.get('review_count', 0)
         if review_count >= 3:
             rating = post.get('rating', 0)
-            stars = "⭐" * min(5, int(rating))
-            card_text += f"┃ ⭐ {stars} {rating:.1f} ({review_count}){' ' * 10} ┃\n"
-        else:
-            card_text += f"┃ ⭐ —{' ' * 25} ┃\n"
+            card_text += f"◈ {'⭐' * min(5, int(rating))} {rating:.1f}\n"
         
-        card_text += f"┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛\n"
-        card_text += f"📍 {index}/{total}"
+        card_text += f"◈ {index}/{total}"
 
         keyboard = [[
-            InlineKeyboardButton("🌐 Перейти", url=post.get('catalog_link', '#')),
-            InlineKeyboardButton("💬 Отзывы", callback_data=f"{CATALOG_CALLBACKS['reviews_menu']}:{post.get('id')}")
+            InlineKeyboardButton("→", url=post.get('catalog_link', '#')),
+            InlineKeyboardButton("💬", callback_data=f"{CATALOG_CALLBACKS['reviews_menu']}:{post.get('id')}")
         ]]
+        
+        # Остальной код без изменений...
         
         # Остальной код отправки без изменений...
         
@@ -362,38 +355,36 @@ async def review_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def categoryfollow_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Управление подписками - /categoryfollow"""
     user_id = update.effective_user.id
     
     try:
         subscriptions = await catalog_service.get_user_subscriptions(user_id)
         
-        text = "🔔 *Мои подписки*\n\n"
+        text = "📋 *Управление подписками*\n\n"
         
         if subscriptions:
-            text += "📋 Ваши категории:\n"
-            for sub in subscriptions:
-                text += f"• {sub.get('category')}\n"
-            text += "\n"
+            text += "✅ Активные подписки:\n"
+            for i, sub in enumerate(subscriptions[:6], 1):
+                text += f"{i}. {sub.get('category')}\n"
+            if len(subscriptions) > 6:
+                text += f"... и еще {len(subscriptions) - 6}\n"
+            text += f"\nВсего: {len(subscriptions)}\n\n"
         else:
             text += "📭 Нет активных подписок\n\n"
         
-        text += "Выберите действие:"
+        text += "Доступные действия:"
         
         keyboard = [
-            [InlineKeyboardButton("➕ Подписаться", callback_data=CATALOG_CALLBACKS['follow_menu'])],
-            [InlineKeyboardButton("📋 Мои подписки", callback_data=CATALOG_CALLBACKS['my_follows'])]
+            [InlineKeyboardButton("📥 Подписаться", callback_data=CATALOG_CALLBACKS['follow_menu'])],
+            [InlineKeyboardButton("📤 Отписаться", callback_data=CATALOG_CALLBACKS['my_follows'])],
+            [InlineKeyboardButton("🗑️ Очистить все", callback_data=CATALOG_CALLBACKS['unfollow_all'])]
         ]
         
-        await update.message.reply_text(
-            text,
-            reply_markup=InlineKeyboardMarkup(keyboard),
-            parse_mode='Markdown'
-        )
+        await update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
         
     except Exception as e:
         logger.error(f"Error in categoryfollow: {e}")
-        await update.message.reply_text("❌ Ошибка загрузки подписок")
+        await update.message.reply_text("⚠️ Ошибка загрузки")
         
 async def addtocatalog_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Добавить в каталог - /addtocatalog"""
