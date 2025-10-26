@@ -35,10 +35,16 @@ from handlers.admin_handler import (
 
 # ============= JOIN HANDLERS (ADDED) =============
 from handlers.join_handler import (
-    chat_join_command, public_join_command, catalog_join_command,
-    marketplace_join_command, join_citytoppeople_command,
-    join_citypartners_command, join_budapesocial_command,
-    groupstats_command, handle_join_callback
+    chat_join_command,
+    public_join_command,
+    catalog_join_command,
+    marketplace_join_command,
+    join_citytoppeople_command,
+    join_citypartners_command,
+    join_budapesocial_command,
+    join_menu_command,
+    start_command,
+    groupstats_command
 )
 
 # ============= РАСШИРЕННЫЕ HANDLERS =============
@@ -353,6 +359,8 @@ def main():
     application.add_handler(CommandHandler("join_citytoppeople", join_citytoppeople_command, filters=budapest_filter))
     application.add_handler(CommandHandler("join_citypartners", join_citypartners_command, filters=budapest_filter))
     application.add_handler(CommandHandler("join_budapesocial", join_budapesocial_command, filters=budapest_filter))
+    application.add_handler(CommandHandler("join", join_menu_command, filters=budapest_filter))
+    application.add_handler(CommandHandler("start", start_command, filters=budapest_filter))
     application.add_handler(CommandHandler("groupstats", groupstats_command, filters=budapest_filter))
     
     # Rating commands
