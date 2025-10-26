@@ -223,7 +223,7 @@ async def social_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Социальные сети TRIX"""
     
     keyboard = [
-        [InlineKeyboardButton("🟧 INSTAGRAM", url="https://www.instagram.com/budapest_trix?igsh=ZXlrNmo4NDdyN2Vz&utm_source=qr)],
+        [InlineKeyboardButton("🟧 INSTAGRAM", url="https://www.instagram.com/budapest_trix?igsh=ZXlrNmo4NDdyN2Vz&utm_source=qr")],
         [InlineKeyboardButton("📘 FACEBOOK", url="https://www.facebook.com/share/g/1EKwURtZ13/?mibextid=wwXIfr")],
         [InlineKeyboardButton("🧵 THREADS", url="https://www.threads.com/@budapest_trix?igshid=NTc4MTIwNjQ2YQ==")],
         [InlineKeyboardButton("🌀 TELEGRAM", url="https://t.me/trixilvebot")],
