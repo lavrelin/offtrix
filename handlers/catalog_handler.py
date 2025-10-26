@@ -263,11 +263,11 @@ async def catalog_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     if not posts:
         keyboard = [
-            [InlineKeyboardButton("🔄 Начать заново", callback_data=CATALOG_CALLBACKS['restart'])],
-            [InlineKeyboardButton("↩️ Главное меню", callback_data="mnc_back")]
+            [InlineKeyboardButton("🔄 Заново", callback_data=CATALOG_CALLBACKS['restart'])],
+            [InlineKeyboardButton("📋 Меню", callback_data="mnc_back")]
         ]
         await update.message.reply_text(
-            "📂 Актуальных публикаций больше нет\n\nНажмите 🔄 'Начать заново'",
+            "📭 Публикаций нет\n\nНажмите 🔄 для обновления",
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
         return
@@ -275,9 +275,8 @@ async def catalog_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     for i, post in enumerate(posts, 1):
         await send_catalog_post(context.bot, update.effective_chat.id, post, i, len(posts))
     
-    # ПОСТОЯННАЯ НАВИГАЦИЯ ВНИЗУ
     await update.message.reply_text(
-        f"🔃 Показано: {len(posts)}",
+        f"📊 Показано: {len(posts)}",
         reply_markup=get_navigation_keyboard()
     )
 
