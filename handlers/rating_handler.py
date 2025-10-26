@@ -449,15 +449,15 @@ async def publish_rate_post(update: Update, context: ContextTypes.DEFAULT_TYPE):
         safe_about = safe_markdown(about)
         
         await update.callback_query.edit_message_text(
-            f"✅ *Заявка отправлена\\!*\n\n"
-            f"{media_text} {media_type\\.title()}\n"
-            f"👤 {safe_name}\n"
-            f"{gender_emoji} {age} лет\n"
-            f"💬 {safe_about}\n"
-            f"🆔 \\#{catalog_number}\n\n"
-            f"⏳ Ожидайте проверки",
-            parse_mode='MarkdownV2'
-        )
+        f"✅ *Заявка отправлена!* \n\n"
+        f"{media_text} {media_type.title()}\n"
+        f"👤 {safe_name}\n"
+        f"{gender_emoji} {age} лет\n"
+        f"💬 {safe_about}\n"
+        f"🆔 #{catalog_number}\n\n"
+        "⏳ Ожидайте проверки",
+        parse_mode='MarkdownV2'
+    )
         
     except Exception as e:
         logger.error(f"Error publishing: {e}", exc_info=True)
