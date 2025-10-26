@@ -283,14 +283,15 @@ async def search_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Поиск в каталоге - /search"""
     context.user_data['catalog_search'] = {'step': 'query'}
     
-    keyboard = [[InlineKeyboardButton("🚫 Отмена", callback_data=CATALOG_CALLBACKS['cancel_search'])]]
+    keyboard = [[InlineKeyboardButton("❌ Отмена", callback_data=CATALOG_CALLBACKS['cancel_search'])]]
     
     await update.message.reply_text(
-        "🔎 *ПОИСК В КАТАЛОГЕ*\n\n"
-        "Введите слова для поиска:\n"
-        "• По названию\n"
-        "• По тегам\n\n"
-        "Пример: ресницы",
+        "🔍 *Поиск по каталогу*\n\n"
+        "Введите запрос для поиска:\n"
+        "• Название\n"
+        "• Теги\n"
+        "• Категория\n\n"
+        "Например: *массаж*",
         reply_markup=InlineKeyboardMarkup(keyboard),
         parse_mode='Markdown'
     )
@@ -301,7 +302,8 @@ async def review_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     if not context.args or not context.args[0].isdigit():
         await update.message.reply_text(
-            "🔄 Использование: `/review [номер]`\n\n"
+            "⭐ *Оценка поста*\n\n"
+            "Формат: `/review [номер]`\n"
             "Пример: `/review 1234`",
             parse_mode='Markdown'
         )
@@ -316,14 +318,10 @@ async def review_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     post_id = post['id']
     
-    # ПРОВЕРКА 1: Уже оставлял отзыв на ЭТУ карточку?
     if check_user_reviewed_post(user_id, post_id):
-        await update.message.reply_text(
-            f"❌ Вы уже оставили отзыв на пост #{catalog_number}"
-        )
+        await update.message.reply_text(f"❌ Вы уже оценили этот пост")
         return
     
-    # ПРОВЕРКА 2: Кулдаун 8 часов на ВСЕ отзывы
     can_review, remaining = await cooldown_service.check_cooldown(
         user_id=user_id,
         command='review',
@@ -334,9 +332,7 @@ async def review_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not can_review:
         hours = remaining // 3600
         minutes = (remaining % 3600) // 60
-        await update.message.reply_text(
-            f"⏳ Вы можете оставить отзыв через {hours}ч {minutes}мин"
-        )
+        await update.message.reply_text(f"⏳ Следующий отзыв через {hours}ч {minutes}м")
         return
     
     context.user_data['catalog_review'] = {
@@ -347,23 +343,23 @@ async def review_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     keyboard = [
         [
-            InlineKeyboardButton("⭐", callback_data=f"{CATALOG_CALLBACKS['rate']}:1"),
-            InlineKeyboardButton("⭐⭐", callback_data=f"{CATALOG_CALLBACKS['rate']}:2"),
-            InlineKeyboardButton("⭐⭐⭐", callback_data=f"{CATALOG_CALLBACKS['rate']}:3")
+            InlineKeyboardButton("1 ⭐", callback_data=f"{CATALOG_CALLBACKS['rate']}:1"),
+            InlineKeyboardButton("2 ⭐⭐", callback_data=f"{CATALOG_CALLBACKS['rate']}:2"),
+            InlineKeyboardButton("3 ⭐⭐⭐", callback_data=f"{CATALOG_CALLBACKS['rate']}:3")
         ],
         [
-            InlineKeyboardButton("⭐⭐⭐⭐", callback_data=f"{CATALOG_CALLBACKS['rate']}:4"),
-            InlineKeyboardButton("⭐⭐⭐⭐⭐", callback_data=f"{CATALOG_CALLBACKS['rate']}:5")
+            InlineKeyboardButton("4 ⭐⭐⭐⭐", callback_data=f"{CATALOG_CALLBACKS['rate']}:4"),
+            InlineKeyboardButton("5 ⭐⭐⭐⭐⭐", callback_data=f"{CATALOG_CALLBACKS['rate']}:5")
         ],
-        [InlineKeyboardButton("⏮️ Отмена", callback_data=CATALOG_CALLBACKS['cancel_review'])]
+        [InlineKeyboardButton("↩️ Назад", callback_data=CATALOG_CALLBACKS['cancel_review'])]
     ]
     
     await update.message.reply_text(
-        f"🌟 *ОЦЕНКА ПОСТА \\#{catalog_number}*\n\n"
+        f"⭐ *Оценка поста #{catalog_number}*\n\n"
         f"📝 {safe_markdown(post.get('name', 'Без названия'))}\n\n"
         "Выберите оценку:",
         reply_markup=InlineKeyboardMarkup(keyboard),
-        parse_mode='MarkdownV2'
+        parse_mode='Markdown'
     )
 
 async def categoryfollow_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -373,19 +369,21 @@ async def categoryfollow_command(update: Update, context: ContextTypes.DEFAULT_T
     try:
         subscriptions = await catalog_service.get_user_subscriptions(user_id)
         
-        text = "🔔 *ПОДПИСКИ НА КАТЕГОРИИ*\n\n"
+        text = "🔔 *Мои подписки*\n\n"
         
         if subscriptions:
-            text += "☑️ Ваши подписки:\n"
+            text += "📋 Ваши категории:\n"
             for sub in subscriptions:
-                text += f"✅ {sub.get('category')}\n"
+                text += f"• {sub.get('category')}\n"
             text += "\n"
+        else:
+            text += "📭 Нет активных подписок\n\n"
         
         text += "Выберите действие:"
         
         keyboard = [
-            [InlineKeyboardButton("✅ Подписаться", callback_data=CATALOG_CALLBACKS['follow_menu'])],
-            [InlineKeyboardButton("☑️ Мои подписки", callback_data=CATALOG_CALLBACKS['my_follows'])]
+            [InlineKeyboardButton("➕ Подписаться", callback_data=CATALOG_CALLBACKS['follow_menu'])],
+            [InlineKeyboardButton("📋 Мои подписки", callback_data=CATALOG_CALLBACKS['my_follows'])]
         ]
         
         await update.message.reply_text(
@@ -396,8 +394,8 @@ async def categoryfollow_command(update: Update, context: ContextTypes.DEFAULT_T
         
     except Exception as e:
         logger.error(f"Error in categoryfollow: {e}")
-        await update.message.reply_text("❌ Ошибка при загрузке подписок")
-
+        await update.message.reply_text("❌ Ошибка загрузки подписок")
+        
 async def addtocatalog_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Добавить в каталог - /addtocatalog"""
     if not Config.is_admin(update.effective_user.id):
