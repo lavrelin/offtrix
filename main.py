@@ -37,7 +37,7 @@ from handlers.admin_handler import (
 # В main.py исправьте импорты:
 from handlers.join_handler import (
     chat_join_command,
-    public_join_command, 
+    public_join_command,
     catalog_join_command,
     marketplace_join_command,
     join_citytoppeople_command,
@@ -46,9 +46,9 @@ from handlers.join_handler import (
     join_menu_command,
     start_command,
     groupstats_command,
-    handle_join_callback
+    handle_join_callback,
+    join_menu_with_confirm
 )
-
 # ============= РАСШИРЕННЫЕ HANDLERS =============
 from handlers.rating_handler import (
     itsme_command, toppeople_command, topboys_command, topgirls_command,
@@ -361,9 +361,10 @@ def main():
     application.add_handler(CommandHandler("join_citytoppeople", join_citytoppeople_command, filters=budapest_filter))
     application.add_handler(CommandHandler("join_citypartners", join_citypartners_command, filters=budapest_filter))
     application.add_handler(CommandHandler("join_budapesocial", join_budapesocial_command, filters=budapest_filter))
-    application.add_handler(CommandHandler("join", join_menu_command, filters=budapest_filter))
+    application.add_handler(CommandHandler("join", join_menu_command, filters=budapest_filter))  # или join_menu_with_confirm
     application.add_handler(CommandHandler("start", start_command, filters=budapest_filter))
     application.add_handler(CommandHandler("groupstats", groupstats_command, filters=budapest_filter))
+    application.add_handler(CallbackQueryHandler(handle_join_callback, pattern=r'^join_ack:'))
     
     # Rating commands
     application.add_handler(CommandHandler("itsme", itsme_command, filters=budapest_filter))
