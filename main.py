@@ -1,8 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 TrixBot Main - v5.3 OPTIMIZED
-Удалены: basic_handler, advanced_moderation, stats_commands
-Добавлено: silence_command, оптимизация импортов
+(Файл изменён: добавлены команды join и groupstats)
 """
 import logging
 import asyncio
@@ -32,6 +31,14 @@ from handlers.admin_handler import (
     admin_command, talkto_command, handle_admin_callback,
     broadcast_command, sendstats_command,
     id_command, report_command, silence_command, is_user_silenced
+)
+
+# ============= JOIN HANDLERS (ADDED) =============
+from handlers.join_handler import (
+    chat_join_command, public_join_command, catalog_join_command,
+    marketplace_join_command, join_citytoppeople_command,
+    join_citypartners_command, join_budapesocial_command,
+    groupstats_command, handle_join_callback
 )
 
 # ============= РАСШИРЕННЫЕ HANDLERS =============
@@ -136,7 +143,7 @@ async def init_db_tables():
         return True
         
     except Exception as e:
-        logger.error(f"❌ Database error: {e}")
+        logger.error(f"❌ Database error: {e}", exc_info=True)
         logger.warning("⚠️ Bot will run in LIMITED MODE")
         return False
 
@@ -338,17 +345,15 @@ def main():
     application.add_handler(CommandHandler("p2p", p2p_command, filters=budapest_filter))
     application.add_handler(CommandHandler("trixlinks", trixlinks_command, filters=budapest_filter))
     
-    # TrixTicket commands
-    application.add_handler(CommandHandler("tickets", tickets_command, filters=budapest_filter))
-    application.add_handler(CommandHandler("mytt", myticket_command, filters=budapest_filter))
-    application.add_handler(CommandHandler("trixtickets", trixtickets_command, filters=budapest_filter))
-    
-    # Admin commands
-    application.add_handler(CommandHandler("admin", admin_command, filters=budapest_filter))
-    application.add_handler(CommandHandler("talkto", talkto_command, filters=budapest_filter))
-    application.add_handler(CommandHandler("broadcast", broadcast_command, filters=budapest_filter))
-    application.add_handler(CommandHandler("sendstats", sendstats_command, filters=budapest_filter))
-    application.add_handler(CommandHandler("silence", silence_command, filters=budapest_filter))
+    # JOIN / INVITE admin commands (added)
+    application.add_handler(CommandHandler("chat_join", chat_join_command, filters=budapest_filter))
+    application.add_handler(CommandHandler("public_join", public_join_command, filters=budapest_filter))
+    application.add_handler(CommandHandler("catalog_join", catalog_join_command, filters=budapest_filter))
+    application.add_handler(CommandHandler("marketplace_join", marketplace_join_command, filters=budapest_filter))
+    application.add_handler(CommandHandler("join_citytoppeople", join_citytoppeople_command, filters=budapest_filter))
+    application.add_handler(CommandHandler("join_citypartners", join_citypartners_command, filters=budapest_filter))
+    application.add_handler(CommandHandler("join_budapesocial", join_budapesocial_command, filters=budapest_filter))
+    application.add_handler(CommandHandler("groupstats", groupstats_command, filters=budapest_filter))
     
     # Rating commands
     application.add_handler(CommandHandler("itsme", itsme_command, filters=budapest_filter))
@@ -411,7 +416,10 @@ def main():
     application.add_handler(CommandHandler("ttsave", ttsave_command, filters=budapest_filter))
     application.add_handler(CommandHandler("trixticketclear", trixticketclear_command, filters=budapest_filter))
     
-    # Callback handler BEFORE message handler
+    # Callback handler for join buttons — ставим ДО общего обработчика колбеков
+    application.add_handler(CallbackQueryHandler(handle_join_callback, pattern=r'^join_ack:'))
+    
+    # Callback handler BEFORE message handler (существующий)
     application.add_handler(CallbackQueryHandler(handle_all_callbacks))
     
     # Message handler
