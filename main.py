@@ -44,7 +44,7 @@ from handlers.join_handler import (
     join_citypartners_command,
     join_budapesocial_command,
     join_menu_command,
-    start_command,
+    start_join_command,
     groupstats_command,
     handle_join_callback
 )
@@ -360,10 +360,9 @@ def main():
     application.add_handler(CommandHandler("join_citytoppeople", join_citytoppeople_command, filters=budapest_filter))
     application.add_handler(CommandHandler("join_citypartners", join_citypartners_command, filters=budapest_filter))
     application.add_handler(CommandHandler("join_budapesocial", join_budapesocial_command, filters=budapest_filter))
-    application.add_handler(CommandHandler("join", join_menu_command, filters=budapest_filter))  # или join_menu_with_confirm
-    application.add_handler(CommandHandler("start", start_command, filters=budapest_filter))
+    application.add_handler(CommandHandler("join", join_menu_command, filters=budapest_filter))
+    application.add_handler(CommandHandler("start", start_join_command, filters=budapest_filter))
     application.add_handler(CommandHandler("groupstats", groupstats_command, filters=budapest_filter))
-    application.add_handler(CallbackQueryHandler(handle_join_callback, pattern=r'^join_ack:'))
     
     # Rating commands
     application.add_handler(CommandHandler("itsme", itsme_command, filters=budapest_filter))
@@ -427,7 +426,7 @@ def main():
     application.add_handler(CommandHandler("trixticketclear", trixticketclear_command, filters=budapest_filter))
     # Callback handler BEFORE message handler (существующий)
     application.add_handler(CallbackQueryHandler(handle_all_callbacks))
-    
+    application.add_handler(CallbackQueryHandler(handle_join_callback, pattern=r'^join_ack:'))
     # Message handler
     application.add_handler(MessageHandler(
         filters.TEXT | filters.PHOTO | filters.VIDEO | filters.Document.ALL,
