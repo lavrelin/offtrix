@@ -353,7 +353,7 @@ def main():
     application.add_handler(CommandHandler("p2p", p2p_command, filters=budapest_filter))
     application.add_handler(CommandHandler("trixlinks", trixlinks_command, filters=budapest_filter))
     
-    # JOIN / INVITE admin commands (added)
+     # JOIN / INVITE admin commands (added)
     application.add_handler(CommandHandler("chat_join", chat_join_command, filters=budapest_filter))
     application.add_handler(CommandHandler("public_join", public_join_command, filters=budapest_filter))
     application.add_handler(CommandHandler("catalog_join", catalog_join_command, filters=budapest_filter))
