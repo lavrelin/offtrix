@@ -146,3 +146,13 @@ class JoinStat(Base):
     count = Column(Integer, default=0, nullable=False)
     last_updated = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+class JoinStatUser(Base):
+    """
+    Уникальные переходы: для каждого group_key только один user_id.
+    """
+    __tablename__ = 'join_stat_users'
+    id = Column(Integer, primary_key=True)
+    key = Column(String(100), nullable=False, index=True)
+    user_id = Column(BigInteger, nullable=False, index=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
