@@ -46,8 +46,7 @@ from handlers.join_handler import (
     join_menu_command,
     start_command,
     groupstats_command,
-    handle_join_callback,
-    join_menu_with_confirm
+    handle_join_callback
 )
 # ============= РАСШИРЕННЫЕ HANDLERS =============
 from handlers.rating_handler import (
