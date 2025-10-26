@@ -41,7 +41,7 @@ GROUPS = {
     },
     "budapesocial": {
         "link": "https://t.me/budapesocial",
-        "title": "BudapeSocial",
+        "title": "BudaPes🦄",
         "id": -1003114019170,
     },
 }
