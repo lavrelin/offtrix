@@ -268,10 +268,10 @@ async def catalog_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [InlineKeyboardButton("📋 Меню", callback_data="mnc_back")]
         ]
         await update.message.reply_text(
-            "📭 Публикаций нет\n"
-            "────────────────────\n"
+            "### Нет публикаций\n\n"
             "Нажмите 🔄 для обновления",
-            reply_markup=InlineKeyboardMarkup(keyboard)
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode='Markdown'
         )
         return
     
@@ -279,10 +279,10 @@ async def catalog_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await send_catalog_post(context.bot, update.effective_chat.id, post, i, len(posts))
     
     await update.message.reply_text(
-        f"📊 Статистика\n"
-        f"──────────────\n"
-        f"Показано: {len(posts)} публикаций",
-        reply_markup=get_navigation_keyboard()
+        f"### Результаты\n\n"
+        f"Найдено: {len(posts)}",
+        reply_markup=get_navigation_keyboard(),
+        parse_mode='Markdown'
     )
 
 async def search_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
