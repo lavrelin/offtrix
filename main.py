@@ -89,7 +89,6 @@ from services.admin_notifications import admin_notifications
 from services.stats_scheduler import stats_scheduler
 from services.channel_stats import channel_stats
 from services.cooldown import cooldown_service
-from services.join_handlers import handle_join_callback
 from services.db import db
 
 load_dotenv()
@@ -424,10 +423,6 @@ def main():
     application.add_handler(CommandHandler("ttrenumber", ttrenumber_command, filters=budapest_filter))
     application.add_handler(CommandHandler("ttsave", ttsave_command, filters=budapest_filter))
     application.add_handler(CommandHandler("trixticketclear", trixticketclear_command, filters=budapest_filter))
-    
-    # Callback handler for join buttons — ставим ДО общего обработчика колбеков
-    application.add_handler(CallbackQueryHandler(handle_join_callback, pattern=r'^join_ack:'))
-    
     # Callback handler BEFORE message handler (существующий)
     application.add_handler(CallbackQueryHandler(handle_all_callbacks))
     
