@@ -33,21 +33,6 @@ from handlers.admin_handler import (
     id_command, report_command, silence_command, is_user_silenced
 )
 
-# ============= JOIN HANDLERS (ADDED) =============
-# В main.py исправьте импорты:
-from handlers.join_handler import (
-    chat_join_command,
-    public_join_command,
-    catalog_join_command,
-    marketplace_join_command,
-    join_citytoppeople_command,
-    join_citypartners_command,
-    join_budapesocial_command,
-    join_menu_command,
-    start_command,
-    groupstats_command,
-    handle_desc_callback
-)
 # ============= РАСШИРЕННЫЕ HANDLERS =============
 from handlers.rating_handler import (
     itsme_command, toppeople_command, topboys_command, topgirls_command,
@@ -352,18 +337,6 @@ def main():
     application.add_handler(CommandHandler("p2p", p2p_command, filters=budapest_filter))
     application.add_handler(CommandHandler("trixlinks", trixlinks_command, filters=budapest_filter))
     
-     # JOIN / INVITE admin commands (added)
-    application.add_handler(CommandHandler("chat_join", chat_join_command, filters=budapest_filter))
-    application.add_handler(CommandHandler("public_join", public_join_command, filters=budapest_filter))
-    application.add_handler(CommandHandler("catalog_join", catalog_join_command, filters=budapest_filter))
-    application.add_handler(CommandHandler("marketplace_join", marketplace_join_command, filters=budapest_filter))
-    application.add_handler(CommandHandler("join_citytoppeople", join_citytoppeople_command, filters=budapest_filter))
-    application.add_handler(CommandHandler("join_citypartners", join_citypartners_command, filters=budapest_filter))
-    application.add_handler(CommandHandler("join_budapesocial", join_budapesocial_command, filters=budapest_filter))
-    application.add_handler(CommandHandler("join", join_menu_command, filters=budapest_filter))
-    application.add_handler(CommandHandler("start", start_command, filters=budapest_filter))
-    application.add_handler(CommandHandler("groupstats", groupstats_command, filters=budapest_filter))
-    application.add_handler(CallbackQueryHandler(handle_desc_callback, pattern=r'^join_desc:', filters=budapest_filter))
     # Rating commands
     application.add_handler(CommandHandler("itsme", itsme_command, filters=budapest_filter))
     application.add_handler(CommandHandler("toppeople", toppeople_command, filters=budapest_filter))
