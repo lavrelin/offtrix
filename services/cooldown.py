@@ -1,12 +1,3 @@
-# -*- coding: utf-8 -*-
-"""
-Cooldown Service v2.0 - Расширенная система кулдаунов
-- Декораторы для команд
-- Разные типы кулдаунов (обычные, ежедневные, недельные, глобальные)
-- Сохранение в БД
-- Логирование использования
-- Автоматическая очистка
-"""
 from datetime import datetime, timedelta
 from services.db import db
 from models import User
@@ -40,58 +31,45 @@ class CooldownService:
     # ============= ДЕКОРАТОРЫ =============
     
     def cooldown(
-        self, 
+        self,
         seconds: int = None,
         cooldown_type: CooldownType = CooldownType.NORMAL,
         command_name: str = None,
         bypass_for_mods: bool = True
     ):
-        """
-        Декоратор для добавления кулдауна к команде
-        
-        Usage:
-            @cooldown_service.cooldown(seconds=3600, command_name='post')
-            async def my_command(update, context):
-                ...
-        """
         def decorator(func: Callable):
             @wraps(func)
             async def wrapper(update, context, *args, **kwargs):
                 user_id = update.effective_user.id
                 cmd_name = command_name or func.__name__
-                
-                # Пропускаем модераторов если указано
+
                 if bypass_for_mods and Config.is_moderator(user_id):
                     return await func(update, context, *args, **kwargs)
-                
-                # Проверяем кулдаун
+
                 can_use, remaining = await self.check_cooldown(
-                    user_id, 
-                    cmd_name, 
+                    user_id,
+                    cmd_name,
                     seconds or Config.COOLDOWN_SECONDS,
                     cooldown_type
                 )
-                
+
                 if not can_use:
                     await self._send_cooldown_message(update, remaining, cmd_name)
                     return
-                
-                # Логируем использование
+
                 self._log_usage(user_id, cmd_name)
-                
-                # Выполняем команду
+
                 result = await func(update, context, *args, **kwargs)
-                
-                # Устанавливаем кулдаун после успешного выполнения
+
                 await self.set_cooldown(
-                    user_id, 
-                    cmd_name, 
+                    user_id,
+                    cmd_name,
                     seconds or Config.COOLDOWN_SECONDS,
                     cooldown_type
                 )
-                
+
                 return result
-            
+
             return wrapper
         return decorator
     
@@ -123,10 +101,7 @@ class CooldownService:
         duration: int,
         cooldown_type: CooldownType = CooldownType.NORMAL
     ) -> Tuple[bool, int]:
-        """
-        Проверка кулдауна
-        Returns: (can_use: bool, remaining_seconds: int)
-        """
+        """Проверить кулдаун"""
         try:
             # Модераторы всегда могут использовать
             if Config.is_moderator(user_id):
