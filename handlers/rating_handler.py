@@ -4,6 +4,7 @@ from telegram.constants import ParseMode
 from config import Config
 from services.cooldown import cooldown_service, CooldownType
 from datetime import datetime, timedelta
+from keyboards.rating_keyboards import *
 import logging
 import re
 import random
@@ -11,21 +12,8 @@ from typing import Dict, Optional
 
 logger = logging.getLogger(__name__)
 
-# ============= CALLBACK PREFIXES (УНИКАЛЬНЫЕ V8) =============
-RATING_CALLBACKS = {
-    'gender': 'rtpc_gender',
-    'vote': 'rtpc_vote',
-    'back': 'rtpc_back',
-    'cancel': 'rtpc_cancel',
-    'noop': 'rtpc_noop',
-}
-
-RATING_MOD_CALLBACKS = {
-    'edit': 'rtmc_edit',
-    'approve': 'rtmc_approve',
-    'reject': 'rtmc_reject',
-    'back': 'rtmc_back',
-}
+RATING_CALLBACKS = RATING_CB
+RATING_MOD_CALLBACKS = RATING_MOD_CB
 
 # ============= SETTINGS =============
 COOLDOWN_HOURS = 24  # 24 часа на создание новой анкеты
@@ -200,14 +188,12 @@ async def itsme_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data['rate_step'] = 'name'
     context.user_data['waiting_for'] = 'rate_name'
     
-    keyboard = [[InlineKeyboardButton("❌ Отмена", callback_data=RATING_CALLBACKS['cancel'])]]
-    
     await update.message.reply_text(
         "⭐ *TopPeople Budapest*\n\n"
         "🎯 Шаг 1/6: *Ваше имя*\n\n"
         "Как вас представить?\n"
         "Пример: Анна",
-        reply_markup=InlineKeyboardMarkup(keyboard),
+        reply_markup=get_cancel_keyboard(),
         parse_mode='Markdown'
     )
 
