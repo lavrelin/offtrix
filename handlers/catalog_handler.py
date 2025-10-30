@@ -8,42 +8,18 @@ from telegram.error import TelegramError, BadRequest, Forbidden
 from config import Config
 from services.catalog_service import catalog_service, CATALOG_CATEGORIES
 from services.cooldown import cooldown_service, CooldownType
+from keyboards.catalog_keyboards import *
 
 logger = logging.getLogger(__name__)
 
-# ============= CALLBACK PREFIXES (УНИКАЛЬНЫЕ V8) =============
-CATALOG_CALLBACKS = {
-    'next': 'ctpc_next',
-    'finish': 'ctpc_finish',
-    'restart': 'ctpc_restart',
-    'search': 'ctpc_search',
-    'cancel_search': 'ctpc_cancel_search',
-    'category': 'ctpc_cat',
-    'click': 'ctpc_click',
-    'add_cat': 'ctpc_add_cat',
-    'rate': 'ctpc_rate',
-    'cancel_review': 'ctpc_cancel_review',
-    'cancel': 'ctpc_cancel',
-    'cancel_top': 'ctpc_cancel_top',
-    'follow_menu': 'ctpc_follow_menu',
-    'follow_cat': 'ctpc_follow_cat',
-    'my_follows': 'ctpc_my_follows',
-    'unfollow': 'ctpc_unfollow',
-    'unfollow_all': 'ctpc_unfollow_all',
-    'reviews_menu': 'ctpc_reviews_menu',
-    'view_reviews': 'ctpc_view_reviews',
-    'write_review': 'ctpc_write_review',
-    'close_menu': 'ctpc_close_menu',
-}
+CATALOG_CALLBACKS = CATALOG_CB
 
-# ============= SETTINGS =============
-REVIEW_COOLDOWN_HOURS = 8  # 8 часов кулдаун на ВСЕ отзывы
+REVIEW_COOLDOWN_HOURS = 8
 REVIEW_MAX_LENGTH = 500
 REVIEW_MIN_LENGTH = 3
 
 # ============= REVIEW TRACKING =============
-# Хранит информацию о том, кто и какие карточки уже оценил
-user_reviewed_posts = {}  # {user_id: set(post_ids)}
+user_reviewed_posts = {}
 
 def safe_markdown(text: str) -> str:
     """Безопасное экранирование для Markdown"""
@@ -58,35 +34,17 @@ def safe_markdown(text: str) -> str:
     return result
 
 def check_user_reviewed_post(user_id: int, post_id: int) -> bool:
-    """
-    Проверка: оставлял ли пользователь отзыв на эту карточку
-    Returns: True если уже оставлял
-    """
     if user_id not in user_reviewed_posts:
         return False
     
     return post_id in user_reviewed_posts[user_id]
 
 def mark_post_as_reviewed(user_id: int, post_id: int):
-    """Отметить что пользователь оставил отзыв на карточку"""
     if user_id not in user_reviewed_posts:
         user_reviewed_posts[user_id] = set()
-    
     user_reviewed_posts[user_id].add(post_id)
     logger.info(f"User {user_id} marked as reviewed post {post_id}")
 
-# ============= NAVIGATION KEYBOARD =============
-
-def get_navigation_keyboard() -> InlineKeyboardMarkup:
-    """Получить постоянную клавиатуру навигации"""
-    keyboard = [
-        [
-            InlineKeyboardButton("➡️ Еще", callback_data=CATALOG_CALLBACKS['next']),
-            InlineKeyboardButton("⏹️ Стоп", callback_data=CATALOG_CALLBACKS['finish'])
-        ],
-        [InlineKeyboardButton("🔍 Поиск", callback_data=CATALOG_CALLBACKS['search'])]
-    ]
-    return InlineKeyboardMarkup(keyboard)
 # ============= MEDIA EXTRACTION =============
 
 async def extract_media_from_link(bot: Bot, telegram_link: str) -> Optional[Dict]:
@@ -208,15 +166,7 @@ async def send_catalog_post(bot: Bot, chat_id: int, post: Dict, index: int, tota
         
         card_text += f"└ 📍 {index}/{total}"
 
-        keyboard = [
-            [
-                InlineKeyboardButton("🔗 Перейти", url=post.get('catalog_link', '#')),
-                InlineKeyboardButton("💬 Отзывы", 
-                                   callback_data=f"{CATALOG_CALLBACKS['reviews_menu']}:{post.get('id')}")
-            ]
-        ]
-        # ... остальной код без изменений
-        reply_markup = InlineKeyboardMarkup(keyboard)
+        reply_markup = get_post_keyboard(post.get('id'), post.get('catalog_link', '#'))
         
         media_type = post.get('media_type')
         media_file_id = post.get('media_file_id')
@@ -263,14 +213,10 @@ async def catalog_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     posts = await catalog_service.get_random_posts_mixed(user_id, count=5)
     
     if not posts:
-        keyboard = [
-            [InlineKeyboardButton("🔄 Заново", callback_data=CATALOG_CALLBACKS['restart'])],
-            [InlineKeyboardButton("📋 Меню", callback_data="mnc_back")]
-        ]
         await update.message.reply_text(
             "### Нет публикаций\n\n"
             "Нажмите 🔄 для обновления",
-            reply_markup=InlineKeyboardMarkup(keyboard),
+            reply_markup=get_restart_keyboard(),
             parse_mode='Markdown'
         )
         return
@@ -286,10 +232,7 @@ async def catalog_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def search_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Поиск в каталоге - /search"""
     context.user_data['catalog_search'] = {'step': 'query'}
-    
-    keyboard = [[InlineKeyboardButton("❌ Отмена", callback_data=CATALOG_CALLBACKS['cancel_search'])]]
     
     await update.message.reply_text(
         "🔍 Поиск по каталогу\n"
@@ -299,7 +242,7 @@ async def search_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "• Теги\n"
         "• Категория\n\n"
         "Пример: *массаж*",
-        reply_markup=InlineKeyboardMarkup(keyboard),
+        reply_markup=get_cancel_search_keyboard(),
         parse_mode='Markdown'
     )
 
@@ -349,25 +292,12 @@ async def review_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         'step': 'rating'
     }
     
-    keyboard = [
-        [
-            InlineKeyboardButton("1 ⭐", callback_data=f"{CATALOG_CALLBACKS['rate']}:1"),
-            InlineKeyboardButton("2 ⭐⭐", callback_data=f"{CATALOG_CALLBACKS['rate']}:2"),
-            InlineKeyboardButton("3 ⭐⭐⭐", callback_data=f"{CATALOG_CALLBACKS['rate']}:3")
-        ],
-        [
-            InlineKeyboardButton("4 ⭐⭐⭐⭐", callback_data=f"{CATALOG_CALLBACKS['rate']}:4"),
-            InlineKeyboardButton("5 ⭐⭐⭐⭐⭐", callback_data=f"{CATALOG_CALLBACKS['rate']}:5")
-        ],
-        [InlineKeyboardButton("↩️ Назад", callback_data=CATALOG_CALLBACKS['cancel_review'])]
-    ]
-    
     await update.message.reply_text(
         f"⭐ Оценка поста #{catalog_number}\n"
         f"────────────────────\n"
         f"📝 {safe_markdown(post.get('name', 'Без названия'))}\n\n"
         "Выберите оценку:",
-        reply_markup=InlineKeyboardMarkup(keyboard),
+        reply_markup=get_rating_keyboard(),
         parse_mode='Markdown'
     )
 
@@ -391,32 +321,28 @@ async def categoryfollow_command(update: Update, context: ContextTypes.DEFAULT_T
         
         text += "Доступные действия:"
         
-        keyboard = [
-            [InlineKeyboardButton("📥 Подписаться", callback_data=CATALOG_CALLBACKS['follow_menu'])],
-            [InlineKeyboardButton("📤 Отписаться", callback_data=CATALOG_CALLBACKS['my_follows'])],
-            [InlineKeyboardButton("🗑️ Очистить все", callback_data=CATALOG_CALLBACKS['unfollow_all'])]
-        ]
-        
-        await update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
+        await update.message.reply_text(
+            text, 
+            reply_markup=get_subscriptions_keyboard(), 
+            parse_mode='Markdown'
+        )
         
     except Exception as e:
         logger.error(f"Error in categoryfollow: {e}")
         await update.message.reply_text("⚠️ Ошибка загрузки")
         
 async def addtocatalog_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Добавить в каталог - /addtocatalog"""
     if not Config.is_admin(update.effective_user.id):
         await update.message.reply_text("❌ Команда только для администраторов")
         return
     
     context.user_data['catalog_add'] = {'step': 'link'}
-    keyboard = [[InlineKeyboardButton("🚫 Отмена", callback_data=CATALOG_CALLBACKS['cancel'])]]
     
     await update.message.reply_text(
         "🛤️ *ДОБАВЛЕНИЕ В КАТАЛОГ*\n\nШаг 1/5\n\n"
         "🔗 Ссылка на пост:\n"
         "Пример: https://t.me/channel/123",
-        reply_markup=InlineKeyboardMarkup(keyboard),
+        reply_markup=get_cancel_keyboard(),
         parse_mode='Markdown'
     )
 
