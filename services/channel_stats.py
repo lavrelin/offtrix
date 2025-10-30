@@ -140,13 +140,12 @@ class ChannelStatsService:
     def _get_chat_name_by_id(self, chat_id: int) -> str:
         """Получить название чата по ID"""
         chat_map = {
-            Config.STATS_CHANNELS.get('catalog'): "🌑 Catalog",
-            Config.STATS_CHANNELS.get('trade'): "🌒 Marketplace",
-            Config.STATS_CHANNELS.get('budapest_main'): "🌓 Budapest",
-            Config.STATS_CHANNELS.get('budapest_chat'): "🌔 Chat",
-            Config.STATS_CHANNELS.get('partners'): "🌕 Partners",
-            Config.STATS_CHANNELS.get('budapest_people'): "🌖 TopPeople",
-            Config.STATS_CHANNELS.get('budapes'): "🌗 🦄Budapest",
+            Config.STATS_CHANNELS.get('gambling_chat'): "🌑 Catalog",
+            Config.STATS_CHANNELS.get('catalog'): "🌒 Marketplace",
+            Config.STATS_CHANNELS.get('trade'): "🌓 Main",
+            Config.STATS_CHANNELS.get('budapest_main'): "🌔 Chat",
+            Config.STATS_CHANNELS.get('budapest_chat'): "🌕 Partners",
+            Config.STATS_CHANNELS.get('partners'): "🌖 Social",
         }
         return chat_map.get(chat_id, f"chat_{chat_id}")
     
@@ -191,66 +190,64 @@ class ChannelStatsService:
     def format_stats_message(self, stats: Dict[str, Any]) -> str:
         """Форматировать статистику в красивое сообщение"""
         try:
-            from data.user_data import user_data, get_top_commands
+            timestamp = stats['timestamp'].strftime('%d.%m.%Y %H:%M')
             
-            now = stats['timestamp']
-            timestamp = now.strftime('%H:%M')
-            
-            # Начало недели (понедельник)
-            days_to_monday = now.weekday()
-            week_start = now - timedelta(days=days_to_monday)
-            week_start_str = week_start.strftime('%d.%m')
-            
-            # Начало месяца
-            month_start = now.replace(day=1)
-            month_start_str = month_start.strftime('%d.%m')
-            
-            message = ""
+            message = f"📊 **РАСШИРЕННАЯ СТАТИСТИКА**\n\n"
+            message += f"🕓 Обновлено {timestamp} (Будапешт)\n\n"
             
             # Названия каналов
             channel_names = {
-                'catalog': '🌑 Каталог Услуг',
-                'trade': '🌒 Marketplace',
-                'budapest_main': '🌓 Будапешт',
-                'budapest_chat': '🌔 Чат',
-                'partners': '🌕 Партнерс',
-                'budapest_people': '🌖 TopPeople',
-                'budapes': '🌗 🦄Budapest',
+                'gambling_chat': '🌑 Catalog',
+                'catalog': '🌒 Marketplace',
+                'trade': '🌓 Main',
+                'budapest_main': '🌔 Chat',
+                'budapest_chat': '🌕 Partners',
+                'partners': '🌖 Social',
+                'budapest_people': '🌗 Instagram',
             }
             
-            # Список каналов
-            for key in channel_names:
-                channel_id = Config.STATS_CHANNELS.get(key)
-                if channel_id:
-                    message += f"{channel_names[key]} —{channel_id}\n"
-            
-            message += f"🌘 TrixBot - статистика бота @Trixlivebot\n\n"
-            message += f"⚡️ Обновлено {timestamp} (Будапешт)\n"
-            
-            # Вычисляем изменения для Week и Month
-            total_week = 0
-            total_month = 0
+            # Статистика каналов
             if stats.get('channels'):
+                message += "📢 **СТАТИСТИКА КАНАЛОВ СООБЩЕСТВА**\n\n"
+                
                 for channel in stats['channels']:
-                    if 'error' not in channel:
-                        total_week += channel.get('week_change', 0)
-                        total_month += channel.get('month_change', 0)
+                    if 'error' in channel:
+                        continue
+                    
+                    name = channel_names.get(channel['name'], channel['name'])
+                    count = channel.get('member_count', 'N/A')
+                    
+                    day_change = channel.get('day_change', 0)
+                    day_prev = channel.get('day_prev', 0)
+                    day_emoji = "📈" if day_change > 0 else "📉" if day_change < 0 else "➖"
+                    
+                    week_change = channel.get('week_change', 0)
+                    week_prev = channel.get('week_prev', 0)
+                    week_emoji = "📈" if week_change > 0 else "📉" if week_change < 0 else "➖"
+                    
+                    month_change = channel.get('month_change', 0)
+                    month_prev = channel.get('month_prev', 0)
+                    month_emoji = "📈" if month_change > 0 else "📉" if month_change < 0 else "➖"
+                    
+                    message += f"{name} — **{count}** участников.\n"
+                    message += f"День: {day_emoji} {day_change:+d} ({day_prev})\n"
+                    message += f"Неделя: {week_emoji} {week_change:+d} ({week_prev})\n"
+                    message += f"Месяц: {month_emoji} {month_change:+d} ({month_prev})\n\n"
+                
+                # Общие изменения
+                if 'total_changes' in stats:
+                    tc = stats['total_changes']
+                    message += f"**Общий прирост подписчиков:**\n"
+                    message += f"День: {tc['day']:+d}\n"
+                    message += f"Неделя: {tc['week']:+d}\n"
+                    message += f"Месяц: {tc['month']:+d}\n\n"
             
-            message += f"Week : {total_week} - старт недели в пн {timestamp}\n"
-            message += f"Month: {total_month} - старт месяца 1го числа {timestamp}\n\n"
+            # Статистика бота
+            from data.user_data import user_data
+            message += "⚙️ **СТАТИСТИКА КОМАНД БОТА**\n\n"
             
-            # TOP FIVE команд
-            top_commands = get_top_commands(5)
-            if top_commands:
-                message += "📏🏆 **TOP ✋FIVE:**\n"
-                medals = ['🥇', '🥈', '🥉', '⚡️', '💥']
-                for i, (cmd, count) in enumerate(top_commands):
-                    medal = medals[i] if i < len(medals) else '▫️'
-                    message += f"▫️ {medal}/{cmd} — {count} раз\n"
-            
-            # Уникальные пользователи
-            message += f"\n🔘 Уникальные пользователи Трикс бота:\n"
-            active_day = sum(
+            total_users = len(user_data)
+            active_24h = sum(
                 1 for d in user_data.values() 
                 if datetime.now() - d['last_activity'] <= timedelta(days=1)
             )
@@ -263,9 +260,24 @@ class ChannelStatsService:
                 if datetime.now() - d['last_activity'] <= timedelta(days=30)
             )
             
-            message += f"Day: {active_day}\n"
+            total_commands = sum(d.get('command_count', 0) for d in user_data.values())
+            
+            message += f"⌨️ Всего вызовов команд: {total_commands}\n\n"
+            message += f"👥 Уникальные пользователи Трикс бота:\n"
+            message += f"Day: {active_24h}\n"
             message += f"Week: {active_week}\n"
-            message += f"Month: {active_month}\n"
+            message += f"Month: {active_month}\n\n"
+            
+            # Топ команд
+            from data.user_data import get_top_commands
+            top_commands = get_top_commands(5)
+            
+            if top_commands:
+                message += "📏🏆 **TOP ✋FIVE:**\n"
+                medals = ['🥇', '🥈', '🥉', '⚡️', '💥']
+                for i, (cmd, count) in enumerate(top_commands):
+                    medal = medals[i] if i < len(medals) else '▫️'
+                    message += f"{medal} /{cmd} — {count} раз\n"
             
             return message
             
