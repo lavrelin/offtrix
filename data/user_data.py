@@ -1,139 +1,141 @@
-import aiosqlite
-import logging
+# -*- coding: utf-8 -*-
+"""
+User Data Management
+Хранение данных пользователей и команд
+"""
 from datetime import datetime
-from typing import Optional, List, Tuple
+from typing import Dict, List, Optional, Tuple
+import logging
 
 logger = logging.getLogger(__name__)
 
-class Database:
-    def __init__(self, db_path: str = "data/trixbot.db"):
-        self.db_path = db_path
-        self.conn: Optional[aiosqlite.Connection] = None
+# Хранилище данных пользователей
+user_data: Dict[int, Dict] = {}
 
-    async def connect(self):
-        try:
-            self.conn = await aiosqlite.connect(self.db_path)
-            self.conn.row_factory = aiosqlite.Row
-            await self.init_tables()
-            logger.info("Database connected successfully")
-        except Exception as e:
-            logger.error(f"Database connection error: {e}")
-            raise
+# Счетчик команд
+command_stats: Dict[str, int] = {}
 
-    async def init_tables(self):
-        try:
-            await self.conn.execute("""
-                CREATE TABLE IF NOT EXISTS users (
-                    user_id INTEGER PRIMARY KEY,
-                    username TEXT,
-                    first_name TEXT,
-                    last_name TEXT,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    last_activity TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            """)
+# Участники лотереи
+lottery_participants: Dict[int, Dict] = {}
 
-            await self.conn.execute("""
-                CREATE TABLE IF NOT EXISTS user_activity (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    user_id INTEGER,
-                    last_activity TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    FOREIGN KEY (user_id) REFERENCES users(user_id)
-                )
-            """)
+def update_user_activity(user_id: int, username: Optional[str] = None):
+    """Обновить активность пользователя"""
+    if user_id not in user_data:
+        user_data[user_id] = {
+            'id': user_id,
+            'username': username or f'ID_{user_id}',
+            'join_date': datetime.now(),
+            'last_activity': datetime.now(),
+            'message_count': 0,
+            'command_count': 0,
+            'banned': False,
+            'muted_until': None
+        }
+    else:
+        user_data[user_id]['last_activity'] = datetime.now()
+        if username:
+            user_data[user_id]['username'] = username
 
-            await self.conn.execute("""
-                CREATE TABLE IF NOT EXISTS command_usage (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    user_id INTEGER,
-                    command TEXT,
-                    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    FOREIGN KEY (user_id) REFERENCES users(user_id)
-                )
-            """)
+def increment_command(command_name: str, user_id: int):
+    """Увеличить счетчик команды"""
+    # Глобальная статистика команд
+    if command_name not in command_stats:
+        command_stats[command_name] = 0
+    command_stats[command_name] += 1
+    
+    # Статистика пользователя
+    if user_id in user_data:
+        user_data[user_id]['command_count'] = user_data[user_id].get('command_count', 0) + 1
 
-            await self.conn.execute("""
-                CREATE TABLE IF NOT EXISTS channel_stats (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    channel_id INTEGER,
-                    member_count INTEGER,
-                    date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            """)
+def increment_message(user_id: int):
+    """Увеличить счетчик сообщений пользователя"""
+    if user_id in user_data:
+        user_data[user_id]['message_count'] = user_data[user_id].get('message_count', 0) + 1
 
-            await self.conn.execute("""
-                CREATE TABLE IF NOT EXISTS publications (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    user_id INTEGER,
-                    message_id INTEGER,
-                    text TEXT,
-                    status TEXT DEFAULT 'pending',
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    moderated_at TIMESTAMP,
-                    published_at TIMESTAMP,
-                    FOREIGN KEY (user_id) REFERENCES users(user_id)
-                )
-            """)
+def get_top_commands(limit: int = 5) -> List[Tuple[str, int]]:
+    """Получить топ команд"""
+    sorted_commands = sorted(command_stats.items(), key=lambda x: x[1], reverse=True)
+    return sorted_commands[:limit]
 
-            await self.conn.commit()
-            logger.info("Database tables initialized")
-        except Exception as e:
-            logger.error(f"Error initializing tables: {e}")
-            raise
+def get_top_users(limit: int = 10) -> List[Dict]:
+    """Получить топ пользователей по активности"""
+    sorted_users = sorted(
+        user_data.values(),
+        key=lambda x: x.get('message_count', 0),
+        reverse=True
+    )
+    return sorted_users[:limit]
 
-    async def execute_query(self, query: str, params: tuple = ()) -> List[Tuple]:
-        try:
-            cursor = await self.conn.execute(query, params)
-            await self.conn.commit()
-            return await cursor.fetchall()
-        except Exception as e:
-            logger.error(f"Query execution error: {e}")
-            return []
+def get_user_by_username(username: str) -> Optional[Dict]:
+    """Получить пользователя по username"""
+    for user in user_data.values():
+        if user.get('username', '').lower() == username.lower():
+            return user
+    return None
 
-    async def add_user(self, user_id: int, username: str = None, first_name: str = None, last_name: str = None):
-        try:
-            await self.conn.execute("""
-                INSERT OR IGNORE INTO users (user_id, username, first_name, last_name)
-                VALUES (?, ?, ?, ?)
-            """, (user_id, username, first_name, last_name))
-            await self.conn.commit()
-        except Exception as e:
-            logger.error(f"Error adding user: {e}")
+def get_user_by_id(user_id: int) -> Optional[Dict]:
+    """Получить пользователя по ID"""
+    return user_data.get(user_id)
 
-    async def update_user_activity(self, user_id: int):
-        try:
-            now = datetime.now().isoformat()
-            await self.conn.execute("""
-                UPDATE users SET last_activity = ? WHERE user_id = ?
-            """, (now, user_id))
-            await self.conn.execute("""
-                INSERT INTO user_activity (user_id, last_activity) VALUES (?, ?)
-            """, (user_id, now))
-            await self.conn.commit()
-        except Exception as e:
-            logger.error(f"Error updating user activity: {e}")
+def is_user_banned(user_id: int) -> bool:
+    """Проверить, забанен ли пользователь"""
+    if user_id not in user_data:
+        return False
+    return user_data[user_id].get('banned', False)
 
-    async def log_command(self, user_id: int, command: str):
-        try:
-            await self.conn.execute("""
-                INSERT INTO command_usage (user_id, command) VALUES (?, ?)
-            """, (user_id, command))
-            await self.conn.commit()
-        except Exception as e:
-            logger.error(f"Error logging command: {e}")
+def is_user_muted(user_id: int) -> bool:
+    """Проверить, замучен ли пользователь"""
+    if user_id not in user_data:
+        return False
+    muted_until = user_data[user_id].get('muted_until')
+    if not muted_until:
+        return False
+    return datetime.now() < muted_until
 
-    async def add_channel_stat(self, channel_id: int, member_count: int):
-        try:
-            await self.conn.execute("""
-                INSERT INTO channel_stats (channel_id, member_count) VALUES (?, ?)
-            """, (channel_id, member_count))
-            await self.conn.commit()
-        except Exception as e:
-            logger.error(f"Error adding channel stat: {e}")
+def ban_user(user_id: int, reason: str = "Не указана"):
+    """Забанить пользователя"""
+    if user_id in user_data:
+        user_data[user_id]['banned'] = True
+        user_data[user_id]['ban_reason'] = reason
+        user_data[user_id]['banned_at'] = datetime.now()
 
-    async def close(self):
-        if self.conn:
-            await self.conn.close()
-            logger.info("Database connection closed")
+def unban_user(user_id: int):
+    """Разбанить пользователя"""
+    if user_id in user_data:
+        user_data[user_id]['banned'] = False
+        user_data[user_id]['ban_reason'] = None
+        user_data[user_id]['banned_at'] = None
 
-db = Database()
+def mute_user(user_id: int, until: datetime):
+    """Замутить пользователя"""
+    if user_id in user_data:
+        user_data[user_id]['muted_until'] = until
+
+def unmute_user(user_id: int):
+    """Размутить пользователя"""
+    if user_id in user_data:
+        user_data[user_id]['muted_until'] = None
+
+def get_banned_users() -> List[Dict]:
+    """Получить список забаненных пользователей"""
+    return [user for user in user_data.values() if user.get('banned', False)]
+
+__all__ = [
+    'user_data',
+    'command_stats',
+    'lottery_participants',
+    'update_user_activity',
+    'increment_command',
+    'increment_message',
+    'get_top_commands',
+    'get_top_users',
+    'get_user_by_username',
+    'get_user_by_id',
+    'is_user_banned',
+    'is_user_muted',
+    'ban_user',
+    'unban_user',
+    'mute_user',
+    'unmute_user',
+    'get_banned_users',
+]
