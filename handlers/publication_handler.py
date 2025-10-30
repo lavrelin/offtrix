@@ -74,8 +74,8 @@ async def start_post_creation(update: Update, context: ContextTypes.DEFAULT_TYPE
     keyboard = [[InlineKeyboardButton("⏮️ Вернуться", callback_data="mnc_ann")]]
     
     await update.callback_query.edit_message_text(
-        f"🗯️ Будапешт → {SUBCATEGORY_NAMES.get(subcategory)}\n\n"
-        "💥 Напишите текст, добавьте медиа:",
+        f"🔘 Будапешт → {SUBCATEGORY_NAMES.get(subcategory)}\n\n"
+        "▫️ Напишите текст, добавьте медиа:",
         reply_markup=InlineKeyboardMarkup(keyboard),
         parse_mode='Markdown'
     )
@@ -139,7 +139,7 @@ async def handle_text_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     
     if 'post_data' not in context.user_data:
-        await update.message.reply_text("🤔 Данные потерялись. /start")
+        await update.message.reply_text("🤔 Данные не найдены. /start")
         return
     
     context.user_data['post_data']['text'] = text
@@ -192,8 +192,8 @@ async def handle_media_input(update: Update, context: ContextTypes.DEFAULT_TYPE)
         total = len(context.user_data['post_data']['media'])
         keyboard = [
             [
-                InlineKeyboardButton("💚 Еще", callback_data=PUB_CALLBACKS['add_media']),
-                InlineKeyboardButton("🤩 Предпросмотр", callback_data=PUB_CALLBACKS['preview'])
+                InlineKeyboardButton("⚡️ Добавить ещё ", callback_data=PUB_CALLBACKS['add_media']),
+                InlineKeyboardButton("⭐️ Предпросмотр и отправка", callback_data=PUB_CALLBACKS['preview'])
             ]
         ]
         
