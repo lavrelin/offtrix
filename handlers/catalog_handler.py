@@ -1,601 +1,792 @@
-from telegram import Update
-from telegram.ext import ContextTypes
-from telegram.error import BadRequest
-from config import Config
-from keyboards import (
-    CATALOG_CALLBACKS,
-    get_navigation_keyboard,
-    get_catalog_card_keyboard,
-    get_category_keyboard,
-    get_rating_keyboard,
-    get_cancel_search_keyboard,
-    get_catalog_cancel_keyboard,
-    get_cancel_review_keyboard,
-    get_reviews_menu_keyboard
-)
-from services.cooldown import cooldown_service, CooldownType
-from services.db import db
-from datetime import datetime
 import logging
+import re
+from typing import Optional, Dict
+from datetime import datetime
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, Bot
+from telegram.ext import ContextTypes
+from telegram.error import TelegramError, BadRequest, Forbidden
+from config import Config
+from services.catalog_service import catalog_service, CATALOG_CATEGORIES
+from services.cooldown import cooldown_service, CooldownType
 
 logger = logging.getLogger(__name__)
 
-CATALOG_CATEGORIES = ["Девушки", "Парни", "Пары", "Контент", "Прочее"]
-REVIEW_COOLDOWN_HOURS = 24
+# ============= CALLBACK PREFIXES (УНИКАЛЬНЫЕ V8) =============
+CATALOG_CALLBACKS = {
+    'next': 'ctpc_next',
+    'finish': 'ctpc_finish',
+    'restart': 'ctpc_restart',
+    'search': 'ctpc_search',
+    'cancel_search': 'ctpc_cancel_search',
+    'category': 'ctpc_cat',
+    'click': 'ctpc_click',
+    'add_cat': 'ctpc_add_cat',
+    'rate': 'ctpc_rate',
+    'cancel_review': 'ctpc_cancel_review',
+    'cancel': 'ctpc_cancel',
+    'cancel_top': 'ctpc_cancel_top',
+    'follow_menu': 'ctpc_follow_menu',
+    'follow_cat': 'ctpc_follow_cat',
+    'my_follows': 'ctpc_my_follows',
+    'unfollow': 'ctpc_unfollow',
+    'unfollow_all': 'ctpc_unfollow_all',
+    'reviews_menu': 'ctpc_reviews_menu',
+    'view_reviews': 'ctpc_view_reviews',
+    'write_review': 'ctpc_write_review',
+    'close_menu': 'ctpc_close_menu',
+}
+
+# ============= SETTINGS =============
+REVIEW_COOLDOWN_HOURS = 8  # 8 часов кулдаун на ВСЕ отзывы
+REVIEW_MAX_LENGTH = 500
+REVIEW_MIN_LENGTH = 3
+
+# ============= REVIEW TRACKING =============
+# Хранит информацию о том, кто и какие карточки уже оценил
+user_reviewed_posts = {}  # {user_id: set(post_ids)}
+
+def safe_markdown(text: str) -> str:
+    """Безопасное экранирование для Markdown"""
+    if not text:
+        return ""
+    
+    special_chars = ['_', '*', '[', ']', '(', ')', '~', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!']
+    result = str(text)
+    for char in special_chars:
+        result = result.replace(char, f'\\{char}')
+    
+    return result
 
 def check_user_reviewed_post(user_id: int, post_id: int) -> bool:
-    return False
+    """
+    Проверка: оставлял ли пользователь отзыв на эту карточку
+    Returns: True если уже оставлял
+    """
+    if user_id not in user_reviewed_posts:
+        return False
+    
+    return post_id in user_reviewed_posts[user_id]
+
+def mark_post_as_reviewed(user_id: int, post_id: int):
+    """Отметить что пользователь оставил отзыв на карточку"""
+    if user_id not in user_reviewed_posts:
+        user_reviewed_posts[user_id] = set()
+    
+    user_reviewed_posts[user_id].add(post_id)
+    logger.info(f"User {user_id} marked as reviewed post {post_id}")
+
+# ============= NAVIGATION KEYBOARD =============
+
+def get_navigation_keyboard() -> InlineKeyboardMarkup:
+    """Получить постоянную клавиатуру навигации"""
+    keyboard = [
+        [
+            InlineKeyboardButton("➡️ Еще", callback_data=CATALOG_CALLBACKS['next']),
+            InlineKeyboardButton("⏹️ Стоп", callback_data=CATALOG_CALLBACKS['finish'])
+        ],
+        [InlineKeyboardButton("🔍 Поиск", callback_data=CATALOG_CALLBACKS['search'])]
+    ]
+    return InlineKeyboardMarkup(keyboard)
+# ============= MEDIA EXTRACTION =============
+
+async def extract_media_from_link(bot: Bot, telegram_link: str) -> Optional[Dict]:
+    """Извлечение медиа из Telegram поста"""
+    try:
+        if not telegram_link or 't.me/' not in telegram_link:
+            return {'success': False, 'message': '❌ Неверная ссылка'}
+        
+        match = re.search(r't\.me/([^/]+)/(\d+)', telegram_link)
+        if not match:
+            return {'success': False, 'message': '❌ Не удалось извлечь данные'}
+        
+        channel_username = match.group(1).lstrip('@')
+        message_id = int(match.group(2))
+        
+        if channel_username.startswith('-'):
+            chat_id = int(channel_username)
+        elif channel_username.isdigit():
+            chat_id = int(f"-100{channel_username}")
+        else:
+            chat_id = f"@{channel_username}"
+        
+        logger.info(f"📥 Extracting from: {chat_id}/{message_id}")
+        
+        try:
+            await bot.get_chat(chat_id)
+        except (Forbidden, BadRequest) as e:
+            logger.error(f"❌ No access: {e}")
+            return {
+                'success': False,
+                'message': '❌ Бот не имеет доступа к каналу'
+            }
+        
+        try:
+            forwarded = await bot.forward_message(
+                chat_id=Config.MODERATION_GROUP_ID,
+                from_chat_id=chat_id,
+                message_id=message_id
+            )
+            
+            result = None
+            media_map = {
+                'photo': lambda m: {'type': 'photo', 'file_id': m.photo[-1].file_id},
+                'video': lambda m: {'type': 'video', 'file_id': m.video.file_id},
+                'document': lambda m: {'type': 'document', 'file_id': m.document.file_id},
+                'animation': lambda m: {'type': 'animation', 'file_id': m.animation.file_id},
+            }
+            
+            for media_type, extractor in media_map.items():
+                if getattr(forwarded, media_type, None):
+                    media_data = extractor(forwarded)
+                    result = {
+                        'success': True,
+                        **media_data,
+                        'media_group_id': forwarded.media_group_id,
+                        'media_json': [media_data['file_id']],
+                        'message': f'✅ {media_type.title()} импортировано'
+                    }
+                    break
+            
+            if not result:
+                result = {
+                    'success': False,
+                    'message': '⚠️ Медиа не найдено в посте'
+                }
+            
+            try:
+                await bot.delete_message(
+                    chat_id=Config.MODERATION_GROUP_ID,
+                    message_id=forwarded.message_id
+                )
+            except Exception:
+                pass
+            
+            return result
+            
+        except (BadRequest, Forbidden) as e:
+            logger.error(f"❌ Forward failed: {e}")
+            return {
+                'success': False,
+                'message': '❌ Не удалось импортировать медиа'
+            }
+            
+    except Exception as e:
+        logger.error(f"❌ Media extraction error: {e}", exc_info=True)
+        return {'success': False, 'message': f'❌ Ошибка: {str(e)[:100]}'}
+
+# ============= SEND POST WITH MEDIA =============
+
+async def send_catalog_post(bot: Bot, chat_id: int, post: Dict, index: int, total: int) -> bool:
+    """Отправка карточки каталога"""
+    try:
+        catalog_number = post.get('catalog_number', '????')
+        
+        card_text = (
+            f"📄 Пост {catalog_number}\n"
+            f"├ 📁 {post.get('category', 'Не указана')}\n"
+            f"├ 📝 {post.get('name', 'Без названия')}\n"
+        )
+        
+        tags = post.get('tags', [])
+        if tags and isinstance(tags, list):
+            pattern = r'[^\w\-]'
+            clean_tags = [
+                f"#{re.sub(pattern, '', str(tag).replace(' ', '_'))}"
+                for tag in tags[:3]
+                if tag
+            ]
+            if clean_tags:
+                card_text += f"├ 🏷️ {' '.join(clean_tags)}\n"
+        
+        review_count = post.get('review_count', 0)
+        if review_count >= 5:
+            rating = post.get('rating', 0)
+            stars = "⭐" * min(5, int(rating))
+            card_text += f"├ ⭐ {stars} {rating:.1f} ({review_count})\n"
+        else:
+            card_text += f"├ ⭐ —\n"
+        
+        card_text += f"└ 📍 {index}/{total}"
+
+        keyboard = [
+            [
+                InlineKeyboardButton("🔗 Перейти", url=post.get('catalog_link', '#')),
+                InlineKeyboardButton("💬 Отзывы", 
+                                   callback_data=f"{CATALOG_CALLBACKS['reviews_menu']}:{post.get('id')}")
+            ]
+        ]
+        # ... остальной код без изменений
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        media_type = post.get('media_type')
+        media_file_id = post.get('media_file_id')
+        
+        if media_file_id and media_type:
+            send_funcs = {
+                'photo': bot.send_photo,
+                'video': bot.send_video,
+                'document': bot.send_document,
+                'animation': bot.send_animation,
+            }
+            
+            send_func = send_funcs.get(media_type)
+            if send_func:
+                try:
+                    await send_func(
+                        chat_id=chat_id,
+                        **{media_type: media_file_id},
+                        caption=card_text,
+                        reply_markup=reply_markup
+                    )
+                    await catalog_service.increment_views(post.get('id'), chat_id)
+                    return True
+                except TelegramError:
+                    pass
+        
+        await bot.send_message(
+            chat_id=chat_id,
+            text=card_text,
+            reply_markup=reply_markup,
+            disable_web_page_preview=True
+        )
+        await catalog_service.increment_views(post.get('id'), chat_id)
+        return True
+        
+    except Exception as e:
+        logger.error(f"Error sending catalog post: {e}")
+        return False
+# ============= COMMANDS =============
 
 async def catalog_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Просмотр каталога - /catalog"""
     user_id = update.effective_user.id
+    posts = await catalog_service.get_random_posts_mixed(user_id, count=5)
     
-    try:
-        from models import CatalogPost
-        from sqlalchemy import select
-        
-        async with db.session_maker() as session:
-            stmt = select(CatalogPost).where(
-                CatalogPost.status == 'approved'
-            ).order_by(CatalogPost.created_at.desc()).limit(1)
-            
-            result = await session.execute(stmt)
-            post = result.scalar_one_or_none()
-            
-            if not post:
-                await update.message.reply_text(
-                    "Каталог пуст\n\nДобавьте первую карточку: /addtocatalog"
-                )
-                return
-            
-            context.user_data['catalog_browse'] = {
-                'current_post_id': post.id,
-                'offset': 0
-            }
-            
-            caption = (
-                f"{post.category}\n"
-                f"{post.name}\n"
-                f"{', '.join(post.tags[:5]) if post.tags else 'Нет тегов'}\n"
-                f"#{post.catalog_number}\n"
-                f"Отзывов: {post.review_count or 0}"
-            )
-            
-            if post.media_type == 'photo' and post.media_file_id:
-                await update.message.reply_photo(
-                    photo=post.media_file_id,
-                    caption=caption,
-                    reply_markup=get_catalog_card_keyboard(post.__dict__, post.catalog_number)
-                )
-            else:
-                await update.message.reply_text(
-                    caption,
-                    reply_markup=get_catalog_card_keyboard(post.__dict__, post.catalog_number)
-                )
-    except Exception as e:
-        logger.error(f"Catalog error: {e}")
-        await update.message.reply_text("Ошибка загрузки каталога")
+    if not posts:
+        keyboard = [
+            [InlineKeyboardButton("🔄 Заново", callback_data=CATALOG_CALLBACKS['restart'])],
+            [InlineKeyboardButton("📋 Меню", callback_data="mnc_back")]
+        ]
+        await update.message.reply_text(
+            "### Нет публикаций\n\n"
+            "Нажмите 🔄 для обновления",
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode='Markdown'
+        )
+        return
+    
+    for i, post in enumerate(posts, 1):
+        await send_catalog_post(context.bot, update.effective_chat.id, post, i, len(posts))
+    
+    await update.message.reply_text(
+        f"### Результаты\n\n"
+        f"Найдено: {len(posts)}",
+        reply_markup=get_navigation_keyboard(),
+        parse_mode='Markdown'
+    )
 
 async def search_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data['catalog_search'] = {'step': 'waiting'}
+    """Поиск в каталоге - /search"""
+    context.user_data['catalog_search'] = {'step': 'query'}
+    
+    keyboard = [[InlineKeyboardButton("❌ Отмена", callback_data=CATALOG_CALLBACKS['cancel_search'])]]
+    
     await update.message.reply_text(
-        "Поиск в каталоге\n\nВведите название или номер карточки:",
-        reply_markup=get_cancel_search_keyboard()
+        "🔍 Поиск по каталогу\n"
+        "────────────────────\n"
+        "Введите запрос для поиска:\n"
+        "• Название\n"
+        "• Теги\n"
+        "• Категория\n\n"
+        "Пример: *массаж*",
+        reply_markup=InlineKeyboardMarkup(keyboard),
+        parse_mode='Markdown'
     )
-
-async def addtocatalog_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    
-    if user_id not in Config.ADMIN_IDS:
-        await update.message.reply_text("Только для админов")
-        return
-    
-    context.user_data['catalog_add'] = {'step': 'category'}
-    await update.message.reply_text(
-        "Добавление в каталог\n\nШаг 1/5\n\nВыберите категорию:",
-        reply_markup=get_category_keyboard(CATALOG_CATEGORIES)
-    )
-
-async def remove_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    
-    if user_id not in Config.ADMIN_IDS:
-        await update.message.reply_text("Только для админов")
-        return
-    
-    args = context.args
-    if not args:
-        await update.message.reply_text(
-            "Использование: /remove [номер]\n\nНапример: /remove 123"
-        )
-        return
-    
-    try:
-        catalog_number = int(args[0])
-    except ValueError:
-        await update.message.reply_text("Неверный номер")
-        return
-    
-    try:
-        from models import CatalogPost
-        from sqlalchemy import select
-        
-        async with db.session_maker() as session:
-            stmt = select(CatalogPost).where(
-                CatalogPost.catalog_number == catalog_number
-            )
-            
-            result = await session.execute(stmt)
-            post = result.scalar_one_or_none()
-            
-            if not post:
-                await update.message.reply_text("Карточка не найдена")
-                return
-            
-            post_name = post.name
-            post_category = post.category
-            
-            await session.delete(post)
-            await session.commit()
-            
-            await update.message.reply_text(
-                f"Карточка #{catalog_number} удалена\n\n{post_category}\n{post_name}"
-            )
-    except Exception as e:
-        logger.error(f"Remove error: {e}")
-        await update.message.reply_text("Ошибка удаления")
 
 async def review_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    args = context.args
-    if not args:
+    """Оставить отзыв - /review [id]"""
+    user_id = update.effective_user.id
+    
+    if not context.args or not context.args[0].isdigit():
         await update.message.reply_text(
-            "Использование: /review [номер]\n\nНапример: /review 123"
+            "⭐ Оценка поста\n"
+            "───────────────\n"
+            "Формат: `/review [номер]`\n\n"
+            "Пример: `/review 1234`",
+            parse_mode='Markdown'
         )
         return
     
-    try:
-        catalog_number = int(args[0])
-    except ValueError:
-        await update.message.reply_text("Неверный номер")
+    catalog_number = int(context.args[0])
+    post = await catalog_service.get_post_by_number(catalog_number)
+    
+    if not post:
+        await update.message.reply_text(f"❌ Пост #{catalog_number} не найден")
         return
     
+    post_id = post['id']
+    
+    if check_user_reviewed_post(user_id, post_id):
+        await update.message.reply_text(f"❌ Вы уже оценили этот пост")
+        return
+    
+    can_review, remaining = await cooldown_service.check_cooldown(
+        user_id=user_id,
+        command='review',
+        duration=REVIEW_COOLDOWN_HOURS * 3600,
+        cooldown_type=CooldownType.NORMAL
+    )
+    
+    if not can_review:
+        hours = remaining // 3600
+        minutes = (remaining % 3600) // 60
+        await update.message.reply_text(f"⏳ Следующий отзыв через {hours}ч {minutes}м")
+        return
+    
+    context.user_data['catalog_review'] = {
+        'post_id': post_id,
+        'catalog_number': catalog_number,
+        'step': 'rating'
+    }
+    
+    keyboard = [
+        [
+            InlineKeyboardButton("1 ⭐", callback_data=f"{CATALOG_CALLBACKS['rate']}:1"),
+            InlineKeyboardButton("2 ⭐⭐", callback_data=f"{CATALOG_CALLBACKS['rate']}:2"),
+            InlineKeyboardButton("3 ⭐⭐⭐", callback_data=f"{CATALOG_CALLBACKS['rate']}:3")
+        ],
+        [
+            InlineKeyboardButton("4 ⭐⭐⭐⭐", callback_data=f"{CATALOG_CALLBACKS['rate']}:4"),
+            InlineKeyboardButton("5 ⭐⭐⭐⭐⭐", callback_data=f"{CATALOG_CALLBACKS['rate']}:5")
+        ],
+        [InlineKeyboardButton("↩️ Назад", callback_data=CATALOG_CALLBACKS['cancel_review'])]
+    ]
+    
+    await update.message.reply_text(
+        f"⭐ Оценка поста #{catalog_number}\n"
+        f"────────────────────\n"
+        f"📝 {safe_markdown(post.get('name', 'Без названия'))}\n\n"
+        "Выберите оценку:",
+        reply_markup=InlineKeyboardMarkup(keyboard),
+        parse_mode='Markdown'
+    )
+
+async def categoryfollow_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     
     try:
-        from models import CatalogPost
-        from sqlalchemy import select
+        subscriptions = await catalog_service.get_user_subscriptions(user_id)
         
-        async with db.session_maker() as session:
-            stmt = select(CatalogPost).where(
-                CatalogPost.catalog_number == catalog_number,
-                CatalogPost.status == 'approved'
-            )
-            
-            result = await session.execute(stmt)
-            post = result.scalar_one_or_none()
-            
-            if not post:
-                await update.message.reply_text("Карточка не найдена")
-                return
-            
-            if check_user_reviewed_post(user_id, post.id):
-                await update.message.reply_text("Вы уже оставили отзыв на эту карточку")
-                return
-            
-            can_use, remaining = await cooldown_service.check_cooldown(
-                user_id=user_id,
-                command='review',
-                duration=REVIEW_COOLDOWN_HOURS * 3600,
-                cooldown_type=CooldownType.NORMAL
-            )
-            
-            if not can_use:
-                hours = remaining // 3600
-                minutes = (remaining % 3600) // 60
-                await update.message.reply_text(
-                    f"Следующий отзыв через: {hours}ч {minutes}м"
-                )
-                return
-            
-            context.user_data['catalog_review'] = {
-                'post_id': post.id,
-                'catalog_number': catalog_number,
-                'step': 'rating'
-            }
-            
-            await update.message.reply_text(
-                f"Оценка #{catalog_number}\n\nВыберите рейтинг:",
-                reply_markup=get_rating_keyboard(post.id, catalog_number)
-            )
+        text = "📋 *Управление подписками*\n\n"
+        
+        if subscriptions:
+            text += "✅ Активные подписки:\n"
+            for i, sub in enumerate(subscriptions[:6], 1):
+                text += f"{i}. {sub.get('category')}\n"
+            if len(subscriptions) > 6:
+                text += f"... и еще {len(subscriptions) - 6}\n"
+            text += f"\nВсего: {len(subscriptions)}\n\n"
+        else:
+            text += "📭 Нет активных подписок\n\n"
+        
+        text += "Доступные действия:"
+        
+        keyboard = [
+            [InlineKeyboardButton("📥 Подписаться", callback_data=CATALOG_CALLBACKS['follow_menu'])],
+            [InlineKeyboardButton("📤 Отписаться", callback_data=CATALOG_CALLBACKS['my_follows'])],
+            [InlineKeyboardButton("🗑️ Очистить все", callback_data=CATALOG_CALLBACKS['unfollow_all'])]
+        ]
+        
+        await update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
+        
     except Exception as e:
-        logger.error(f"Review error: {e}")
-        await update.message.reply_text("Ошибка")
-
-async def categoryfollow_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        logger.error(f"Error in categoryfollow: {e}")
+        await update.message.reply_text("⚠️ Ошибка загрузки")
+        
+async def addtocatalog_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Добавить в каталог - /addtocatalog"""
+    if not Config.is_admin(update.effective_user.id):
+        await update.message.reply_text("❌ Команда только для администраторов")
+        return
+    
+    context.user_data['catalog_add'] = {'step': 'link'}
+    keyboard = [[InlineKeyboardButton("🚫 Отмена", callback_data=CATALOG_CALLBACKS['cancel'])]]
+    
     await update.message.reply_text(
-        "Подписки на категории\n\nЭта функция в разработке"
+        "🛤️ *ДОБАВЛЕНИЕ В КАТАЛОГ*\n\nШаг 1/5\n\n"
+        "🔗 Ссылка на пост:\n"
+        "Пример: https://t.me/channel/123",
+        reply_markup=InlineKeyboardMarkup(keyboard),
+        parse_mode='Markdown'
     )
 
 async def addgirltocat_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id not in Config.ADMIN_IDS:
-        await update.message.reply_text("Только для админов")
+    """Добавить в TopGirls - /addgirltocat"""
+    if not Config.is_admin(update.effective_user.id):
+        await update.message.reply_text("❌ Только для админов")
         return
     
-    context.user_data['catalog_add'] = {
-        'step': 'catalog_link',
-        'category': 'Девушки'
-    }
+    context.user_data['catalog_add_top'] = {'step': 'link', 'category': '👱🏻‍♀️ TopGirls'}
+    keyboard = [[InlineKeyboardButton("🚫 Отмена", callback_data=CATALOG_CALLBACKS['cancel_top'])]]
+    
     await update.message.reply_text(
-        "Девушки\n\nШаг 2/5\n\nОтправьте ссылку на профиль:",
-        reply_markup=get_catalog_cancel_keyboard()
+        "💃 *ДОБАВЛЕНИЕ В TOPGIRLS*\n\nШаг 1/3\n\n"
+        "👩🏼‍💼 Ссылка на оригинальный пост:",
+        reply_markup=InlineKeyboardMarkup(keyboard),
+        parse_mode='Markdown'
     )
 
 async def addboytocat_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id not in Config.ADMIN_IDS:
-        await update.message.reply_text("Только для админов")
+    """Добавить в TopBoys - /addboytocat"""
+    if not Config.is_admin(update.effective_user.id):
+        await update.message.reply_text("❌ Только для админов")
         return
     
-    context.user_data['catalog_add'] = {
-        'step': 'catalog_link',
-        'category': 'Парни'
-    }
+    context.user_data['catalog_add_top'] = {'step': 'link', 'category': '🤵🏼‍♂️ TopBoys'}
+    keyboard = [[InlineKeyboardButton("🚫 Отмена", callback_data=CATALOG_CALLBACKS['cancel_top'])]]
+    
     await update.message.reply_text(
-        "Парни\n\nШаг 2/5\n\nОтправьте ссылку на профиль:",
-        reply_markup=get_catalog_cancel_keyboard()
+        "🤵 *ДОБАВЛЕНИЕ В TOPBOYS*\n\nШаг 1/3\n\n"
+        "🧏🏻‍♂️ Ссылка на оригинальный пост:",
+        reply_markup=InlineKeyboardMarkup(keyboard),
+        parse_mode='Markdown'
     )
 
+# ============= MEDIA HANDLER =============
+
+async def handle_catalog_media(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
+    """Обработка загрузки медиа"""
+    if 'catalog_add' not in context.user_data or context.user_data['catalog_add'].get('step') != 'media':
+        return False
+    
+    data = context.user_data['catalog_add']
+    
+    media_map = {
+        'photo': lambda m: ('photo', m.photo[-1].file_id),
+        'video': lambda m: ('video', m.video.file_id),
+        'document': lambda m: ('document', m.document.file_id),
+        'animation': lambda m: ('animation', m.animation.file_id),
+    }
+    
+    for media_type, extractor in media_map.items():
+        if getattr(update.message, media_type, None):
+            media_type, file_id = extractor(update.message)
+            data.update({
+                'media_type': media_type,
+                'media_file_id': file_id,
+                'media_group_id': update.message.media_group_id,
+                'media_json': [file_id],
+                'step': 'tags'
+            })
+            await update.message.reply_text(
+                f"✅ Медиа: {media_type}\n\n"
+                "#️⃣ Теги через запятую (до 10):\n"
+                "Пример: маникюр, гель-лак"
+            )
+            return True
+    
+    return False
+
+# ============= CALLBACK HANDLER =============
+
 async def handle_catalog_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обработка всех callback каталога"""
     query = update.callback_query
     await query.answer()
-    data = query.data
+    
+    data_parts = query.data.split(":")
+    
+    if data_parts[0].startswith('ctpc_'):
+        action = data_parts[0][5:]
+    else:
+        action = data_parts[0]
+    
     user_id = update.effective_user.id
     
     async def safe_edit(text, keyboard=None):
         try:
-            if keyboard:
-                await query.edit_message_caption(caption=text, reply_markup=keyboard)
-            else:
-                await query.edit_message_caption(caption=text)
-        except BadRequest:
+            await query.edit_message_text(text, reply_markup=keyboard, parse_mode='Markdown')
+        except Exception:
             try:
-                if keyboard:
-                    await query.edit_message_text(text=text, reply_markup=keyboard)
-                else:
-                    await query.edit_message_text(text=text)
-            except:
-                pass
+                await query.edit_message_caption(caption=text, reply_markup=keyboard, parse_mode='Markdown')
+            except Exception:
+                await query.message.reply_text(text, reply_markup=keyboard, parse_mode='Markdown')
     
-    if data == CATALOG_CALLBACKS['cancel']:
-        context.user_data.pop('catalog_add', None)
+    # ============= NAVIGATION =============
+    
+    if action == 'next':
+        posts = await catalog_service.get_random_posts_mixed(user_id, count=5)
+        if not posts:
+            keyboard = [
+                [InlineKeyboardButton("🔄 Начать заново", callback_data=CATALOG_CALLBACKS['restart'])],
+                [InlineKeyboardButton("↩️ Главное меню", callback_data="mnc_back")]
+            ]
+            await safe_edit("✅ Все посты просмотрены!\n\nНажмите 🔄 для сброса", InlineKeyboardMarkup(keyboard))
+        else:
+            for i, post in enumerate(posts, 1):
+                await send_catalog_post(context.bot, query.message.chat_id, post, i, len(posts))
+            await query.message.delete()
+    
+    elif action == 'finish':
+        await safe_edit(
+            "✅ Просмотр завершён!\n\n"
+            "/catalog - начать заново\n"
+            "/search - поиск\n"
+            "/categoryfollow - подписки"
+        )
+    
+    elif action == 'restart':
+        await catalog_service.reset_session(user_id)
+        await safe_edit("🔄 Перезапуск!\n\nИспользуйте /catalog")
+    
+    elif action == 'search':
+        context.user_data['catalog_search'] = {'step': 'query'}
+        keyboard = [[InlineKeyboardButton("🚫 Отмена", callback_data=CATALOG_CALLBACKS['cancel_search'])]]
+        await safe_edit(
+            "🔍 *ПОИСК*\n\nВведите слова для поиска:",
+            InlineKeyboardMarkup(keyboard)
+        )
+    
+    elif action == 'cancel_search':
         context.user_data.pop('catalog_search', None)
-        await safe_edit("Отменено")
-        return
+        await safe_edit("❌ Поиск отменён")
     
-    if data == CATALOG_CALLBACKS['cancel_search']:
-        context.user_data.pop('catalog_search', None)
-        await safe_edit("Поиск отменён")
-        return
+    elif action == 'click':
+        post_id = int(data_parts[1]) if len(data_parts) > 1 else None
+        if post_id:
+            await catalog_service.increment_clicks(post_id, user_id)
     
-    if data == CATALOG_CALLBACKS['cancel_review']:
+    elif action == 'rate':
+        if 'catalog_review' not in context.user_data:
+            await query.answer("❌ Сессия истекла", show_alert=True)
+            return
+        
+        rating = int(data_parts[1]) if len(data_parts) > 1 else 5
+        context.user_data['catalog_review']['rating'] = rating
+        context.user_data['catalog_review']['step'] = 'text'
+        
+        catalog_number = context.user_data['catalog_review'].get('catalog_number')
+        stars = "⭐" * rating
+        
+        keyboard = [[InlineKeyboardButton("⏮️ Отмена", callback_data=CATALOG_CALLBACKS['cancel_review'])]]
+        
+        await safe_edit(
+            f"✅ Оценка: {stars}\n\n"
+            f"📝 Пост \\#{catalog_number}\n\n"
+            f"Теперь напишите текст отзыва \\({REVIEW_MIN_LENGTH}\\-{REVIEW_MAX_LENGTH} символов\\):",
+            InlineKeyboardMarkup(keyboard)
+        )
+    
+    elif action == 'cancel_review':
         context.user_data.pop('catalog_review', None)
-        await safe_edit("Отзыв отменён")
-        return
+        await safe_edit("❌ Отзыв отменён")
     
-    if data == CATALOG_CALLBACKS['close_menu']:
-        await query.message.delete()
-        return
+    elif action == 'cancel':
+        context.user_data.pop('catalog_add', None)
+        await safe_edit("❌ Добавление отменено")
     
-    if data.startswith(CATALOG_CALLBACKS['add_cat']):
-        parts = data.split(':', 1)
-        if len(parts) == 2:
-            category = parts[1]
-            context.user_data['catalog_add'] = {
-                'step': 'catalog_link',
-                'category': category
-            }
-            await safe_edit(
-                f"{category}\n\nШаг 2/5\n\nОтправьте ссылку на профиль:",
-                get_catalog_cancel_keyboard()
-            )
-        return
+    elif action == 'cancel_top':
+        context.user_data.pop('catalog_add_top', None)
+        await safe_edit("❌ Добавление отменено")
     
-    if data.startswith(CATALOG_CALLBACKS['rate']):
-        parts = data.split(':')
+    elif action == 'add_cat':
+        if 'catalog_add' not in context.user_data:
+            await query.answer("❌ Сессия истекла", show_alert=True)
+            return
         
-        if len(parts) == 3:
-            post_id = int(parts[1])
-            catalog_number = int(parts[2])
-            
-            if check_user_reviewed_post(user_id, post_id):
-                await query.answer("Вы уже оценили эту карточку", show_alert=True)
-                return
-            
-            can_use, remaining = await cooldown_service.check_cooldown(
-                user_id=user_id,
-                command='review',
-                duration=REVIEW_COOLDOWN_HOURS * 3600,
-                cooldown_type=CooldownType.NORMAL
-            )
-            
-            if not can_use:
-                hours = remaining // 3600
-                minutes = (remaining % 3600) // 60
-                await query.answer(f"Следующий отзыв через: {hours}ч {minutes}м", show_alert=True)
-                return
-            
-            context.user_data['catalog_review'] = {
-                'post_id': post_id,
-                'catalog_number': catalog_number,
-                'step': 'rating'
-            }
-            
-            await safe_edit(
-                f"Оценка #{catalog_number}\n\nВыберите рейтинг:",
-                get_rating_keyboard(post_id, catalog_number)
-            )
+        category = ":".join(data_parts[1:]) if len(data_parts) > 1 else "Общее"
+        context.user_data['catalog_add']['category'] = category
+        context.user_data['catalog_add']['step'] = 'name'
         
-        elif len(parts) == 4:
-            rating = int(parts[1])
-            post_id = int(parts[2])
-            catalog_number = int(parts[3])
-            
-            review_data = context.user_data.get('catalog_review', {})
-            if review_data.get('post_id') != post_id:
-                await query.answer("Ошибка данных", show_alert=True)
-                return
-            
-            review_data['rating'] = rating
-            review_data['step'] = 'text'
-            
-            await safe_edit(
-                f"Оценка: {rating}/5\n\nТеперь напишите текст отзыва:",
-                get_cancel_review_keyboard()
-            )
-        return
-    
-    if data.startswith(CATALOG_CALLBACKS['next']):
-        browse_data = context.user_data.get('catalog_browse', {})
+        safe_category = safe_markdown(category)
         
-        try:
-            from models import CatalogPost
-            from sqlalchemy import select
-            
-            async with db.session_maker() as session:
-                offset = browse_data.get('offset', 0) + 1
-                
-                stmt = select(CatalogPost).where(
-                    CatalogPost.status == 'approved'
-                ).order_by(CatalogPost.created_at.desc()).offset(offset).limit(1)
-                
-                result = await session.execute(stmt)
-                post = result.scalar_one_or_none()
-                
-                if not post:
-                    await query.answer("Больше карточек нет", show_alert=True)
-                    return
-                
-                browse_data['current_post_id'] = post.id
-                browse_data['offset'] = offset
-                
-                caption = (
-                    f"{post.category}\n"
-                    f"{post.name}\n"
-                    f"{', '.join(post.tags[:5]) if post.tags else 'Нет тегов'}\n"
-                    f"#{post.catalog_number}\n"
-                    f"Отзывов: {post.review_count or 0}"
-                )
-                
-                if post.media_type == 'photo' and post.media_file_id:
-                    await query.message.delete()
-                    await context.bot.send_photo(
-                        chat_id=query.message.chat.id,
-                        photo=post.media_file_id,
-                        caption=caption,
-                        reply_markup=get_catalog_card_keyboard(post.__dict__, post.catalog_number)
-                    )
-                else:
-                    await safe_edit(
-                        caption,
-                        get_catalog_card_keyboard(post.__dict__, post.catalog_number)
-                    )
-        except Exception as e:
-            logger.error(f"Next catalog error: {e}")
-            await query.answer("Ошибка загрузки", show_alert=True)
-        return
+        await safe_edit(
+            f"✅ Категория: {safe_category}\n\n"
+            f"📝 Шаг 3/5\n\nНазвание \\(макс\\. 255 символов\\):"
+        )
+
+# ============= TEXT HANDLER =============
 
 async def handle_catalog_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обработка текстового ввода"""
     user_id = update.effective_user.id
     text = update.message.text
     
+    # Search
+    if 'catalog_search' in context.user_data:
+        query_text = text.strip()
+        
+        if len(query_text) < 2:
+            await update.message.reply_text("❌ Запрос слишком короткий")
+            return
+        
+        posts = await catalog_service.search_posts(query_text, limit=10)
+        
+        if posts:
+            for i, post in enumerate(posts, 1):
+                await send_catalog_post(context.bot, update.effective_chat.id, post, i, len(posts))
+            
+            # ПОСТОЯННАЯ НАВИГАЦИЯ
+            await update.message.reply_text(
+                f"🔍 Найдено: {len(posts)} постов",
+                reply_markup=get_navigation_keyboard()
+            )
+        else:
+            await update.message.reply_text("❌ Ничего не найдено")
+        
+        context.user_data.pop('catalog_search', None)
+        return
+    
+    # Review text
+    if 'catalog_review' in context.user_data:
+        data = context.user_data['catalog_review']
+        
+        if data.get('step') == 'text':
+            review_text = text.strip()[:REVIEW_MAX_LENGTH]
+            
+            if len(review_text) < REVIEW_MIN_LENGTH:
+                await update.message.reply_text(f"❌ Отзыв слишком короткий (минимум {REVIEW_MIN_LENGTH} символа)")
+                return
+            
+            post_id = data.get('post_id')
+            
+            # Проверка что не оставлял отзыв на эту карточку
+            if check_user_reviewed_post(user_id, post_id):
+                await update.message.reply_text("❌ Вы уже оставили отзыв на эту карточку")
+                context.user_data.pop('catalog_review', None)
+                return
+            
+            # Добавляем отзыв
+            review_id = await catalog_service.add_review(
+                post_id=post_id,
+                user_id=user_id,
+                review_text=review_text,
+                rating=data.get('rating', 5),
+                username=update.effective_user.username,
+                bot=context.bot
+            )
+            
+            if review_id:
+                # ОТМЕЧАЕМ что пользователь оставил отзыв на эту карточку
+                mark_post_as_reviewed(user_id, post_id)
+                
+                # УСТАНАВЛИВАЕМ КУЛДАУН 8 часов на ВСЕ отзывы
+                await cooldown_service.set_cooldown(
+                    user_id=user_id,
+                    command='review',
+                    duration=REVIEW_COOLDOWN_HOURS * 3600,
+                    cooldown_type=CooldownType.NORMAL
+                )
+                
+                await update.message.reply_text(
+                    f"✅ Отзыв сохранён!\n\n"
+                    f"#{data.get('catalog_number')}\n"
+                    f"Спасибо за ваш отзыв!\n\n"
+                    f"⏳ Следующий отзыв можно оставить через {REVIEW_COOLDOWN_HOURS}ч"
+                )
+                
+                logger.info(f"User {user_id} left review on post {post_id} with {REVIEW_COOLDOWN_HOURS}h cooldown")
+            else:
+                await update.message.reply_text("❌ Ошибка при сохранении отзыва")
+            
+            context.user_data.pop('catalog_review', None)
+            return
+    
+    # Add post
     if 'catalog_add' in context.user_data:
         data = context.user_data['catalog_add']
         step = data.get('step')
         
-        if step == 'catalog_link':
-            data['catalog_link'] = text
-            data['step'] = 'name'
-            await update.message.reply_text(
-                "Шаг 3/5\n\nВведите название:",
-                reply_markup=get_catalog_cancel_keyboard()
-            )
+        if step == 'link':
+            if text.startswith('https://t.me/'):
+                data['catalog_link'] = text
+                
+                await update.message.reply_text("⏳ Импортирую медиа...")
+                
+                media_result = await extract_media_from_link(context.bot, text)
+                
+                if media_result and media_result.get('success'):
+                    data.update({
+                        'media_type': media_result['type'],
+                        'media_file_id': media_result['file_id'],
+                        'media_group_id': media_result.get('media_group_id'),
+                        'media_json': media_result.get('media_json', [])
+                    })
+                    await update.message.reply_text(f"✅ Медиа импортировано: {media_result['type']}")
+                
+                data['step'] = 'category'
+                
+                keyboard = [[InlineKeyboardButton(cat, callback_data=f"{CATALOG_CALLBACKS['add_cat']}:{cat}")] 
+                           for cat in CATALOG_CATEGORIES.keys()]
+                await update.message.reply_text(
+                    "📂 Шаг 2/5\n\nВыберите категорию:",
+                    reply_markup=InlineKeyboardMarkup(keyboard)
+                )
+            else:
+                await update.message.reply_text("❌ Ссылка должна начинаться с https://t\\.me/", parse_mode='Markdown')
+        
         elif step == 'name':
-            data['name'] = text[:100]
-            data['step'] = 'media'
-            await update.message.reply_text(
-                "Шаг 4/5\n\nОтправьте фото или видео\n(или /skip для пропуска):",
-                reply_markup=get_catalog_cancel_keyboard()
-            )
+            data['name'] = text[:255]
+            
+            if data.get('media_file_id'):
+                data['step'] = 'tags'
+                safe_text = safe_markdown(text[:50])
+                await update.message.reply_text(
+                    f"✅ Название: {safe_text}\n\n"
+                    f"#️⃣ Шаг 4/4\n\nТеги через запятую:",
+                    parse_mode='MarkdownV2'
+                )
+            else:
+                data['step'] = 'media'
+                await update.message.reply_text(
+                    "📸 Шаг 4/5\n\nОтправьте фото/видео или /skip"
+                )
+        
         elif text == '/skip' and step == 'media':
             data['step'] = 'tags'
-            await update.message.reply_text(
-                "Шаг 5/5\n\nТеги через запятую:",
-                reply_markup=get_catalog_cancel_keyboard()
-            )
+            await update.message.reply_text("#️⃣ Шаг 4/4\n\nТеги через запятую:")
+        
         elif step == 'tags':
             tags = [t.strip() for t in text.split(',') if t.strip()][:10]
             data['tags'] = tags
             
-            try:
-                from models import CatalogPost
-                from sqlalchemy import select, func
-                
-                async with db.session_maker() as session:
-                    stmt = select(func.coalesce(func.max(CatalogPost.catalog_number), 0))
-                    result = await session.execute(stmt)
-                    max_number = result.scalar()
-                    new_number = max_number + 1
-                    
-                    new_post = CatalogPost(
-                        user_id=user_id,
-                        catalog_link=data['catalog_link'],
-                        category=data['category'],
-                        name=data['name'],
-                        tags=tags,
-                        media_type=data.get('media_type'),
-                        media_file_id=data.get('media_file_id'),
-                        status='approved',
-                        catalog_number=new_number,
-                        created_at=datetime.utcnow(),
-                        review_count=0
-                    )
-                    
-                    session.add(new_post)
-                    await session.commit()
-                    
-                    await update.message.reply_text(
-                        f"Пост #{new_number} добавлен!\n\n{data['category']}\n{data['name']}\n{len(tags)} тегов"
-                    )
-                    context.user_data.pop('catalog_add', None)
-            except Exception as e:
-                logger.error(f"Add post error: {e}")
-                await update.message.reply_text("Ошибка при добавлении")
-        return
-    
-    if 'catalog_search' in context.user_data:
-        search_data = context.user_data['catalog_search']
-        if search_data.get('step') == 'waiting':
-            query_text = text.strip()
-            
-            try:
-                from models import CatalogPost
-                from sqlalchemy import select, or_
-                
-                async with db.session_maker() as session:
-                    try:
-                        catalog_number = int(query_text)
-                        stmt = select(CatalogPost).where(
-                            CatalogPost.catalog_number == catalog_number,
-                            CatalogPost.status == 'approved'
-                        )
-                    except ValueError:
-                        stmt = select(CatalogPost).where(
-                            CatalogPost.status == 'approved',
-                            or_(
-                                CatalogPost.name.ilike(f'%{query_text}%'),
-                                CatalogPost.tags.contains([query_text])
-                            )
-                        ).limit(1)
-                    
-                    result = await session.execute(stmt)
-                    post = result.scalar_one_or_none()
-                    
-                    if not post:
-                        await update.message.reply_text("Ничего не найдено")
-                        context.user_data.pop('catalog_search', None)
-                        return
-                    
-                    caption = (
-                        f"{post.category}\n"
-                        f"{post.name}\n"
-                        f"{', '.join(post.tags[:5]) if post.tags else 'Нет тегов'}\n"
-                        f"#{post.catalog_number}\n"
-                        f"Отзывов: {post.review_count or 0}"
-                    )
-                    
-                    if post.media_type == 'photo' and post.media_file_id:
-                        await update.message.reply_photo(
-                            photo=post.media_file_id,
-                            caption=caption,
-                            reply_markup=get_catalog_card_keyboard(post.__dict__, post.catalog_number)
-                        )
-                    else:
-                        await update.message.reply_text(
-                            caption,
-                            reply_markup=get_catalog_card_keyboard(post.__dict__, post.catalog_number)
-                        )
-                    
-                    context.user_data.pop('catalog_search', None)
-            except Exception as e:
-                logger.error(f"Search error: {e}")
-                await update.message.reply_text("Ошибка поиска")
-        return
-    
-    if 'catalog_review' in context.user_data:
-        review_data = context.user_data['catalog_review']
-        if review_data.get('step') == 'text':
-            review_text = text[:500]
-            post_id = review_data['post_id']
-            rating = review_data['rating']
-            
-            try:
-                from models import CatalogReview, CatalogPost
-                
-                async with db.session_maker() as session:
-                    new_review = CatalogReview(
-                        post_id=post_id,
-                        user_id=user_id,
-                        rating=rating,
-                        text=review_text,
-                        created_at=datetime.utcnow()
-                    )
-                    
-                    session.add(new_review)
-                    
-                    post = await session.get(CatalogPost, post_id)
-                    if post:
-                        post.review_count = (post.review_count or 0) + 1
-                    
-                    await session.commit()
-                    
-                    await update.message.reply_text(
-                        f"Отзыв добавлен!\n\nОценка: {rating}/5\n{review_text[:100]}"
-                    )
-                    context.user_data.pop('catalog_review', None)
-            except Exception as e:
-                logger.error(f"Review save error: {e}")
-                await update.message.reply_text("Ошибка сохранения отзыва")
-        return
-
-async def handle_catalog_media(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if 'catalog_add' in context.user_data:
-        data = context.user_data['catalog_add']
-        if data.get('step') == 'media':
-            if update.message.photo:
-                data['media_type'] = 'photo'
-                data['media_file_id'] = update.message.photo[-1].file_id
-            elif update.message.video:
-                data['media_type'] = 'video'
-                data['media_file_id'] = update.message.video.file_id
-            else:
-                await update.message.reply_text("Отправьте фото или видео")
-                return
-            
-            data['step'] = 'tags'
-            await update.message.reply_text(
-                "Шаг 5/5\n\nТеги через запятую:",
-                reply_markup=get_catalog_cancel_keyboard()
+            post_id = await catalog_service.add_post(
+                user_id=user_id,
+                catalog_link=data['catalog_link'],
+                category=data['category'],
+                name=data['name'],
+                tags=tags,
+                media_type=data.get('media_type'),
+                media_file_id=data.get('media_file_id'),
+                media_group_id=data.get('media_group_id'),
+                media_json=data.get('media_json', [])
             )
+            
+            if post_id:
+                post = await catalog_service.get_post_by_id(post_id)
+                await update.message.reply_text(
+                    f"✅ Пост #{post.get('catalog_number')} добавлен!\n\n"
+                    f"📂 {data['category']}\n"
+                    f"📝 {data['name']}\n"
+                    f"🏷️ {len(tags)} тегов"
+                )
+            else:
+                await update.message.reply_text("❌ Ошибка при добавлении")
+            
+            context.user_data.pop('catalog_add', None)
+        
+        return
 
 __all__ = [
-    'CATALOG_CALLBACKS',
     'catalog_command',
     'search_command',
-    'addtocatalog_command',
-    'remove_command',
     'review_command',
     'categoryfollow_command',
+    'addtocatalog_command',
     'addgirltocat_command',
     'addboytocat_command',
     'handle_catalog_callback',
     'handle_catalog_text',
     'handle_catalog_media',
+    'CATALOG_CALLBACKS',
 ]
