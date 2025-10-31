@@ -22,6 +22,13 @@ from handlers.publication_handler import (
 from handlers.piar_handler import (
     handle_piar_callback, handle_piar_text, handle_piar_photo
 )
+# В начало файла после других handlers
+from handlers.budapest_handler import (
+    handle_budapest_callback, handle_budapest_text, handle_budapest_media
+)
+from handlers.baraholka_handler import (
+    handle_baraholka_callback, handle_baraholka_text, handle_baraholka_media
+)
 from handlers.moderation_handler import (
     handle_moderation_callback, handle_moderation_text,
     ban_command, unban_command, mute_command, unmute_command,
@@ -161,34 +168,38 @@ async def handle_all_callbacks(update: Update, context):
     
     try:
         # Route by prefix
-        if data.startswith('mnc_'):
-            await handle_menu_callback(update, context)
-        elif data.startswith('pbc_'):
-            await handle_publication_callback(update, context)
-        elif data.startswith('mdc_'):
-            await handle_moderation_callback(update, context)
-        elif data.startswith('adm_'):
-            await handle_admin_callback(update, context)
-        elif data.startswith('prc_'):
-            await handle_piar_callback(update, context)
-        elif data.startswith('ctc_'):
-            await handle_catalog_callback(update, context)
-        elif data.startswith('ifc_'):
-            await handle_info_callback(update, context)
-        elif data.startswith('gmc_'):
-            await handle_game_callback(update, context)
-        elif data.startswith('gwc_'):
-            await handle_giveaway_callback(update, context)
-        elif data.startswith('rtc_'):
-            await handle_rate_callback(update, context)
-        elif data.startswith('rmc_'):
-            await handle_rate_moderation_callback(update, context)
-        elif data.startswith('ttc_'):
-            await handle_trixticket_callback(update, context)
-        elif data.startswith('hpc_'):
-            await handle_hp_callback(update, context)
-        else:
-            await query.answer("⚠️ Неизвестная команда", show_alert=True)
+        if data.startswith('menu_'):
+    await handle_menu_callback(update, context)
+elif data.startswith('bp_'):
+    await handle_budapest_callback(update, context)
+elif data.startswith('bar_'):
+    await handle_baraholka_callback(update, context)
+elif data.startswith('prc_'):  # piar - catalog
+    await handle_piar_callback(update, context)
+elif data.startswith('mod_'):  # moderation
+    await handle_moderation_callback(update, context)
+elif data.startswith('pbc_'):  # publication callbacks
+    await handle_publication_callback(update, context)
+elif data.startswith('adm_'):  # admin callbacks
+    await handle_admin_callback(update, context)
+elif data.startswith('ctc_'):  # catalog callbacks
+    await handle_catalog_callback(update, context)
+elif data.startswith('ifc_'):  # info callbacks
+    await handle_info_callback(update, context)
+elif data.startswith('gmc_'):  # game callbacks
+    await handle_game_callback(update, context)
+elif data.startswith('gwc_'):  # giveaway callbacks
+    await handle_giveaway_callback(update, context)
+elif data.startswith('rtc_'):  # rating callbacks
+    await handle_rate_callback(update, context)
+elif data.startswith('rmc_'):  # rating moderation callbacks
+    await handle_rate_moderation_callback(update, context)
+elif data.startswith('ttc_'):  # trix ticket callbacks
+    await handle_trixticket_callback(update, context)
+elif data.startswith('hpc_'):  # hp callbacks
+    await handle_hp_callback(update, context)
+else:
+    await query.answer("⚠️ Неизвестная команда", show_alert=True)
             
     except Exception as e:
         logger.error(f"Error handling callback: {e}", exc_info=True)
@@ -223,7 +234,23 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
     waiting_for = context.user_data.get('waiting_for')
     
     try:
-        # RATING HANDLERS
+        # ============= BUDAPEST HANDLERS =============
+        if waiting_for in ['budapest_text', 'budapest_media']:
+            if waiting_for == 'budapest_text':
+                await handle_budapest_text(update, context)
+            elif waiting_for == 'budapest_media':
+                await handle_budapest_media(update, context)
+            return
+        
+        # ============= BARAHOLKA HANDLERS =============
+        if waiting_for in ['baraholka_text', 'baraholka_media']:
+            if waiting_for == 'baraholka_text':
+                await handle_baraholka_text(update, context)
+            elif waiting_for == 'baraholka_media':
+                await handle_baraholka_media(update, context)
+            return
+        
+        # ============= RATING HANDLERS =============
         if waiting_for in ['rate_photo', 'rate_name', 'rate_age', 'rate_about', 'rate_profile']:
             handlers = {
                 'rate_photo': handle_rate_photo,
@@ -235,13 +262,13 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await handlers[waiting_for](update, context)
             return
         
-        # GAME HANDLERS
+        # ============= GAME HANDLERS =============
         if await handle_game_text_input(update, context):
             return
         if await handle_game_media_input(update, context):
             return
         
-        # PIAR HANDLERS
+        # ============= PIAR HANDLERS =============
         if waiting_for and waiting_for.startswith('piar_'):
             if update.message.photo or update.message.video:
                 await handle_piar_photo(update, context)
@@ -251,7 +278,7 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await handle_piar_text(update, context, field, text)
             return
         
-        # CATALOG HANDLERS
+        # ============= CATALOG HANDLERS =============
         if (update.message.photo or update.message.video or 
             update.message.animation or update.message.document):
             if 'catalog_add' in context.user_data and context.user_data['catalog_add'].get('step') == 'media':
@@ -262,7 +289,7 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await handle_catalog_text(update, context)
             return
         
-        # PUBLICATION HANDLERS
+        # ============= PUBLICATION HANDLERS =============
         if update.message.photo or update.message.video or update.message.document:
             await handle_media_input(update, context)
             return
@@ -271,6 +298,37 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await handle_text_input(update, context)
             return
         
+        # ============= ADMIN HANDLERS =============
+        if waiting_for and waiting_for.startswith('admin_'):
+            if waiting_for == 'admin_talkto_user':
+                await handle_admin_talkto(update, context)
+                return
+            elif waiting_for == 'admin_broadcast':
+                await handle_admin_broadcast(update, context)
+                return
+        
+        # ============= GIVEAWAY HANDLERS =============
+        if waiting_for and waiting_for.startswith('giveaway_'):
+            await handle_giveaway_text(update, context)
+            return
+        
+        # ============= TRIX TICKET HANDLERS =============
+        if waiting_for and waiting_for.startswith('ticket_'):
+            await handle_trixticket_text(update, context)
+            return
+        
+        # ============= AUTOPOST HANDLERS =============
+        if waiting_for and waiting_for.startswith('autopost_'):
+            await handle_autopost_text(update, context)
+            return
+        
+        # ============= REGULAR MESSAGES =============
+        if (update.message.text and 
+            not update.message.text.startswith('/') and 
+            not waiting_for):
+            await handle_regular_message(update, context)
+            return
+            
     except Exception as e:
         logger.error(f"Error: {e}", exc_info=True)
         await update.message.reply_text("❌ Ошибка")
