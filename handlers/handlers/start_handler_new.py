@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Start Handler v6.0 - SIMPLIFIED
+Start Handler v2.0 - SIMPLIFIED MENU
 """
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
@@ -11,13 +11,6 @@ import string
 
 logger = logging.getLogger(__name__)
 
-# Import menu callbacks
-from menu_handler_v6 import MENU_CALLBACKS
-
-def generate_referral_code():
-    """Generate unique referral code"""
-    return ''.join(secrets.choice(string.ascii_letters + string.digits) for _ in range(8))
-
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /start command"""
     user_id = update.effective_user.id
@@ -26,7 +19,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     last_name = update.effective_user.last_name
     chat_id = update.effective_chat.id
     
-    # ✅ Игнорируем команду в Будапешт чате
+    # Игнорируем команду в Будапешт чате
     if chat_id == Config.BUDAPEST_CHAT_ID:
         try:
             await update.message.delete()
@@ -66,37 +59,41 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Показываем главное меню
     await show_main_menu(update, context)
 
+def generate_referral_code():
+    """Generate unique referral code"""
+    return ''.join(secrets.choice(string.ascii_uppercase + string.digits) for _ in range(8))
+
 async def show_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Show simplified main menu v6.0"""
+    """Show main menu - SIMPLIFIED VERSION"""
     
-    # ✅ Не показываем меню в Будапешт чате
+    # Игнорируем в Будапешт чате
     chat_id = update.effective_chat.id
     if chat_id == Config.BUDAPEST_CHAT_ID:
         logger.info(f"Blocked main menu in Budapest chat")
         return
     
-    # ✅ УПРОЩЕННОЕ МЕНЮ
     keyboard = [
         [InlineKeyboardButton("🙅‍♂️ Будапешт - канал", url="https://t.me/snghu")],
         [InlineKeyboardButton("🙅‍♀️ Будапешт - чат", url="https://t.me/tgchatxxx")],
-        [InlineKeyboardButton("🙅 Каталог услуг", url="https://t.me/catalogtrix")],
-        [InlineKeyboardButton("🕵️‍♂️ Барахолка", url="https://t.me/hungarytrade")],
-        [InlineKeyboardButton("✍️ Создать публикацию", callback_data=MENU_CALLBACKS['write'])]
+        [InlineKeyboardButton("🙅 Будапешт - каталог услуг", url="https://t.me/catalogtrix")],
+        [InlineKeyboardButton("🕵️‍♂️ Куплю / Отдам / Продам", url="https://t.me/hungarytrade")],
+        [InlineKeyboardButton("✍️ Писать", callback_data="menu_write")]
     ]
     
     text = (
-        "🇭🇺 **Сообщество Будапешта Трикс**\n\n"
+        "### Сообщество Будапешта Trix\n"
+        "Актуальные каналы Будапешта и Венгрии🇭🇺\n\n"
         
-        "**Наши каналы:**\n"
-        "🙅‍♂️ **Канал** — новости и информация\n"
-        "🙅‍♀️ **Чат** — общение участников\n"
-        "🙅 **Каталог** — мастера и услуги\n"
-        "🕵️‍♂️ **Барахолка** — купля/продажа\n\n"
+        "**Наше:**\n"
+        "- [ ] 🙅‍♂️ *Канал* — информация и новости\n"
+        "- [ ] 🙅‍♀️ *Чат* — общение и обсуждения\n"
+        "- [ ] 🙅 *Каталог* — список мастеров и услуг\n"
+        "- [ ] 🕵️‍♂️ *Барахолка* — Куплю / Отдам / Продам\n\n"
             
-        "**Создать публикацию:**\n"
-        "Нажмите ✍️ **Создать публикацию**\n\n"
+        "**Как сделать публикацию❔**\n"
+        "Нажмите ✍️ *Писать*\n\n"
         
-        "📌 *Закрепите бота для быстрого доступа*"
+        "🔒 *Закрепите бота*"
     )
     
     try:
@@ -114,14 +111,14 @@ async def show_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
     except Exception as e:
         logger.error(f"Error showing main menu: {e}")
-        # Fallback
         try:
             await update.effective_message.reply_text(
-                "🇭🇺 TrixBot - Сообщество Будапешта\n\n"
-                "Нажмите 'Создать публикацию' чтобы начать",
+                "TrixBot - топ комьюнити Будапешта и 🇭🇺\n\n"
+                "Нажмите 'Писать' чтобы создать публикацию",
                 reply_markup=InlineKeyboardMarkup(keyboard)
             )
         except Exception as e2:
             logger.error(f"Fallback menu also failed: {e2}")
-
-__all__ = ['start_command', 'show_main_menu']
+            await update.effective_message.reply_text(
+                "Бот запущен! Используйте /start для перезапуска."
+            )
