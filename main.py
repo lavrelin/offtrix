@@ -1,3 +1,8 @@
+# -*- coding: utf-8 -*-
+"""
+TrixBot Main - v5.3 OPTIMIZED
+(Файл изменён: добавлены команды join и groupstats)
+"""
 import logging
 import asyncio
 from telegram import Update
@@ -8,6 +13,7 @@ from telegram.ext import (
 from dotenv import load_dotenv
 from config import Config
 
+# ============= ОСНОВНЫЕ HANDLERS =============
 from handlers.start_handler import start_command
 from handlers.menu_handler import handle_menu_callback
 from handlers.publication_handler import (
@@ -27,6 +33,7 @@ from handlers.admin_handler import (
     id_command, report_command, silence_command, is_user_silenced
 )
 
+# ============= РАСШИРЕННЫЕ HANDLERS =============
 from handlers.rating_handler import (
     itsme_command, toppeople_command, topboys_command, topgirls_command,
     toppeoplereset_command, handle_rate_callback, handle_rate_moderation_callback,
@@ -35,7 +42,7 @@ from handlers.rating_handler import (
 from handlers.catalog_handler import (
     catalog_command, search_command, addtocatalog_command, review_command,
     categoryfollow_command, addgirltocat_command, addboytocat_command,
-    remove_command, handle_catalog_callback, handle_catalog_text, handle_catalog_media
+    handle_catalog_callback, handle_catalog_text, handle_catalog_media
 )
 from handlers.games_handler import (
     wordadd_command, wordedit_command, wordclear_command,
@@ -50,6 +57,7 @@ from handlers.giveaway_handler import (
     giveaway_command, handle_giveaway_callback, p2p_command
 )
 
+# ============= ОСТАЛЬНЫЕ HANDLERS =============
 from handlers.info_handler import (
     social_command, bonus_command, trixlinks_command, hp_command, handle_info_callback
 )
@@ -61,6 +69,7 @@ from handlers.trixticket_handler import (
     ttsave_command, trixticketclear_command
 )
 
+# ============= SERVICES =============
 from services.autopost_service import autopost_service
 from services.admin_notifications import admin_notifications
 from services.stats_scheduler import stats_scheduler
@@ -76,12 +85,15 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# ============= BUDAPEST CHAT FILTER =============
 class BudapestChatFilter(filters.MessageFilter):
+    """Фильтр для игнорирования команд из Budapest чата"""
     def __init__(self):
         self.budapest_chat_id = Config.BUDAPEST_CHAT_ID
         super().__init__()
     
     def filter(self, message) -> bool:
+        """True если НЕ из Budapest чата"""
         if not message or not message.chat:
             return True
         return message.chat.id != self.budapest_chat_id
@@ -89,61 +101,66 @@ class BudapestChatFilter(filters.MessageFilter):
 budapest_filter = BudapestChatFilter()
 
 async def init_db_tables():
+    """Initialize database tables"""
     try:
-        logger.info("Initializing database...")
+        logger.info("🔄 Initializing database...")
         
         db_url = Config.DATABASE_URL
         if not db_url:
-            logger.error("DATABASE_URL not configured")
+            logger.error("❌ DATABASE_URL not configured")
             return False
         
-        logger.info(f"Using database: {db_url[:50]}...")
+        logger.info(f"📊 Using database: {db_url[:50]}...")
         
         from models import Base
         
         try:
             await db.init()
         except Exception as db_init_error:
-            logger.error(f"Database init failed: {db_init_error}")
-            logger.warning("Bot will run in LIMITED MODE")
+            logger.error(f"⚠️ Database init failed: {db_init_error}")
+            logger.warning("💡 Bot will run in LIMITED MODE")
             return False
         
         if not db.engine or not db.session_maker:
-            logger.error("Database engine not created")
+            logger.error("❌ Database engine not created")
             return False
         
-        logger.info("Database engine initialized")
+        logger.info("✅ Database engine initialized")
         
         async with db.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
-        logger.info("Database tables created")
+        logger.info("✅ Database tables created")
         
-        logger.info("Database ready")
+        logger.info("✅ Database ready")
         return True
         
     except Exception as e:
-        logger.error(f"Database error: {e}", exc_info=True)
-        logger.warning("Bot will run in LIMITED MODE")
+        logger.error(f"❌ Database error: {e}", exc_info=True)
+        logger.warning("⚠️ Bot will run in LIMITED MODE")
         return False
 
 async def handle_all_callbacks(update: Update, context):
+    """Router for all callback queries - OPTIMIZED v5.3"""
     query = update.callback_query
     
     if not query or not query.data:
         return
     
+    # Ignore Budapest chat
     if query.message and query.message.chat.id == Config.BUDAPEST_CHAT_ID:
-        await query.answer("Бот не работает в этом чате", show_alert=True)
+        await query.answer("⚠️ Бот не работает в этом чате", show_alert=True)
         return
     
+    # Check if user is silenced
     if is_user_silenced(update.effective_user.id):
-        await query.answer("Вы в режиме silence", show_alert=True)
+        await query.answer("🔇 Вы в режиме silence", show_alert=True)
         return
     
     data = query.data
     logger.info(f"Callback: {data} from user {update.effective_user.id}")
     
     try:
+        # Route by prefix
         if data.startswith('mnc_'):
             await handle_menu_callback(update, context)
         elif data.startswith('pbc_'):
@@ -154,125 +171,162 @@ async def handle_all_callbacks(update: Update, context):
             await handle_admin_callback(update, context)
         elif data.startswith('prc_'):
             await handle_piar_callback(update, context)
-        elif data.startswith('ctlg_'):
+        elif data.startswith('ctc_'):
             await handle_catalog_callback(update, context)
+        elif data.startswith('ifc_'):
+            await handle_info_callback(update, context)
         elif data.startswith('gmc_'):
             await handle_game_callback(update, context)
         elif data.startswith('gwc_'):
             await handle_giveaway_callback(update, context)
-        elif data.startswith(('rtg_', 'rtgm_')):
-            if data.startswith('rtgm_'):
-                await handle_rate_moderation_callback(update, context)
-            else:
-                await handle_rate_callback(update, context)
+        elif data.startswith('rtc_'):
+            await handle_rate_callback(update, context)
+        elif data.startswith('rmc_'):
+            await handle_rate_moderation_callback(update, context)
         elif data.startswith('ttc_'):
             await handle_trixticket_callback(update, context)
         elif data.startswith('hpc_'):
-            await handle_info_callback(update, context)
+            await handle_hp_callback(update, context)
         else:
-            logger.warning(f"Unknown callback prefix: {data[:10]}")
-            await query.answer("Неизвестная команда")
-    
+            await query.answer("⚠️ Неизвестная команда", show_alert=True)
+            
     except Exception as e:
-        logger.error(f"Callback error: {e}", exc_info=True)
+        logger.error(f"Error handling callback: {e}", exc_info=True)
         try:
-            await query.answer("Произошла ошибка", show_alert=True)
+            await query.answer("❌ Ошибка", show_alert=True)
         except:
             pass
 
 async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.message and update.message.chat.id == Config.BUDAPEST_CHAT_ID:
+    """Main message handler - v5.3 OPTIMIZED"""
+    user_id = update.effective_user.id
+    chat_id = update.effective_chat.id
+    
+    # Check if user is silenced
+    if is_user_silenced(user_id):
         return
     
-    if is_user_silenced(update.effective_user.id):
+    # Moderation FIRST
+    if context.user_data.get('mod_waiting_for'):
+        await handle_moderation_text(update, context)
         return
+    
+    # Ignore Budapest chat
+    if chat_id == Config.BUDAPEST_CHAT_ID:
+        channel_stats.increment_message_count(chat_id)
+        return
+    
+    # Count messages
+    if chat_id in Config.STATS_CHANNELS.values():
+        channel_stats.increment_message_count(chat_id)
+    
+    waiting_for = context.user_data.get('waiting_for')
     
     try:
-        if 'publication_state' in context.user_data:
-            if update.message.photo or update.message.video or update.message.document:
-                await handle_media_input(update, context)
-            elif update.message.text:
-                await handle_text_input(update, context)
+        # RATING HANDLERS
+        if waiting_for in ['rate_photo', 'rate_name', 'rate_age', 'rate_about', 'rate_profile']:
+            handlers = {
+                'rate_photo': handle_rate_photo,
+                'rate_name': handle_rate_name,
+                'rate_age': handle_rate_age,
+                'rate_about': handle_rate_about,
+                'rate_profile': handle_rate_profile,
+            }
+            await handlers[waiting_for](update, context)
             return
         
-        if 'piar_state' in context.user_data:
-            if update.message.photo:
+        # GAME HANDLERS
+        if await handle_game_text_input(update, context):
+            return
+        if await handle_game_media_input(update, context):
+            return
+        
+        # PIAR HANDLERS
+        if waiting_for and waiting_for.startswith('piar_'):
+            if update.message.photo or update.message.video:
                 await handle_piar_photo(update, context)
-            elif update.message.text:
-                await handle_piar_text(update, context)
+            else:
+                field = waiting_for.replace('piar_', '')
+                text = update.message.text or update.message.caption
+                await handle_piar_text(update, context, field, text)
             return
         
-        if 'rating_form' in context.user_data:
-            form_data = context.user_data['rating_form']
-            step = form_data.get('step')
-            if update.message.photo:
-                await handle_rate_photo(update, context)
-            elif update.message.text:
-                if step == 'age':
-                    await handle_rate_age(update, context)
-                elif step == 'name':
-                    await handle_rate_name(update, context)
-                elif step == 'about':
-                    await handle_rate_about(update, context)
-                elif step == 'profile':
-                    await handle_rate_profile(update, context)
+        # CATALOG HANDLERS
+        if (update.message.photo or update.message.video or 
+            update.message.animation or update.message.document):
+            if 'catalog_add' in context.user_data and context.user_data['catalog_add'].get('step') == 'media':
+                if await handle_catalog_media(update, context):
+                    return
+        
+        if any(key in context.user_data for key in ['catalog_add', 'catalog_review', 'catalog_priority', 'catalog_ad', 'catalog_search']):
+            await handle_catalog_text(update, context)
             return
         
-        if 'catalog_add' in context.user_data or 'catalog_search' in context.user_data or 'catalog_review' in context.user_data:
-            if update.message.photo or update.message.video:
-                await handle_catalog_media(update, context)
-            elif update.message.text:
-                await handle_catalog_text(update, context)
+        # PUBLICATION HANDLERS
+        if update.message.photo or update.message.video or update.message.document:
+            await handle_media_input(update, context)
             return
         
-        if 'moderation_state' in context.user_data:
-            await handle_moderation_text(update, context)
+        if waiting_for == 'post_text' or context.user_data.get('post_data'):
+            await handle_text_input(update, context)
             return
         
-        if 'game_state' in context.user_data:
-            if update.message.photo or update.message.video:
-                await handle_game_media_input(update, context)
-            elif update.message.text:
-                await handle_game_text_input(update, context)
-            return
-    
     except Exception as e:
-        logger.error(f"Message handler error: {e}", exc_info=True)
+        logger.error(f"Error: {e}", exc_info=True)
+        await update.message.reply_text("❌ Ошибка")
 
-async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE):
-    logger.error(f"Exception: {context.error}", exc_info=context.error)
+async def error_handler(update: object, context):
+    """Error handler"""
+    logger.error(f"Error: {context.error}", exc_info=context.error)
+    
+    if isinstance(update, Update) and update.effective_message:
+        try:
+            await update.effective_message.reply_text("❌ Произошла ошибка")
+        except:
+            pass
 
 def main():
+    """Main function"""
+    if not Config.BOT_TOKEN:
+        logger.error("❌ BOT_TOKEN not found!")
+        return
+    
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     
-    print("\n" + "="*50)
-    print("TRIXBOT v5.3 OPTIMIZED STARTING...")
-    print("="*50)
-    print(f"Moderation: {Config.MODERATION_GROUP_ID}")
-    print(f"Admin: {Config.ADMIN_GROUP_ID}")
-    print(f"Budapest chat: {Config.BUDAPEST_CHAT_ID}")
-    print("Optimized prefixes: ctlg_, rtg_")
+    logger.info("🚀 Starting TrixBot v5.3 OPTIMIZED...")
+    print("🚀 Starting TrixBot v5.3 OPTIMIZED...")
+    print(f"📊 Database: {Config.DATABASE_URL[:30]}...")
+    print(f"🚫 Budapest chat: {Config.BUDAPEST_CHAT_ID}")
+    print("✨ Removed: basic_handler, advanced_moderation, stats_commands")
+    print("✅ Added: silence_command, optimized prefixes")
     
+    # Initialize DB
     db_initialized = loop.run_until_complete(init_db_tables())
     
     if not db_initialized:
-        logger.warning("Bot starting without database")
-        print("Database not available")
+        logger.warning("⚠️ Bot starting without database")
+        print("⚠️ Database not available")
     else:
-        print("Database connected")
+        print("✅ Database connected")
     
+    # Create application
     application = Application.builder().token(Config.BOT_TOKEN).build()
     
+    # Setup services
     autopost_service.set_bot(application.bot)
     admin_notifications.set_bot(application.bot)
     channel_stats.set_bot(application.bot)
     stats_scheduler.set_admin_notifications(admin_notifications)
     
+    # Start cooldown cleanup
     loop.create_task(cooldown_service.start_cleanup_task())
     
-    logger.info("Services initialized")
+    logger.info("✅ Services initialized")
     
+    # ============= REGISTER HANDLERS =============
+    
+    # Start and basic commands
     application.add_handler(CommandHandler("start", start_command, filters=budapest_filter))
     application.add_handler(CommandHandler("id", id_command, filters=budapest_filter))
     application.add_handler(CommandHandler("report", report_command, filters=budapest_filter))
@@ -283,21 +337,23 @@ def main():
     application.add_handler(CommandHandler("p2p", p2p_command, filters=budapest_filter))
     application.add_handler(CommandHandler("trixlinks", trixlinks_command, filters=budapest_filter))
     
+    # Rating commands
     application.add_handler(CommandHandler("itsme", itsme_command, filters=budapest_filter))
     application.add_handler(CommandHandler("toppeople", toppeople_command, filters=budapest_filter))
     application.add_handler(CommandHandler("topboys", topboys_command, filters=budapest_filter))
     application.add_handler(CommandHandler("topgirls", topgirls_command, filters=budapest_filter))
     application.add_handler(CommandHandler("toppeoplereset", toppeoplereset_command, filters=budapest_filter))
     
+    # Catalog commands
     application.add_handler(CommandHandler("search", search_command, filters=budapest_filter))
     application.add_handler(CommandHandler("addtocatalog", addtocatalog_command, filters=budapest_filter))
-    application.add_handler(CommandHandler("remove", remove_command, filters=budapest_filter))
     application.add_handler(CommandHandler("review", review_command, filters=budapest_filter))
     application.add_handler(CommandHandler("categoryfollow", categoryfollow_command, filters=budapest_filter))
     application.add_handler(CommandHandler("catalog", catalog_command, filters=budapest_filter))
     application.add_handler(CommandHandler("addgirltocat", addgirltocat_command, filters=budapest_filter))
     application.add_handler(CommandHandler("addboytocat", addboytocat_command, filters=budapest_filter))
     
+    # Moderation commands
     application.add_handler(CommandHandler("ban", ban_command, filters=budapest_filter))
     application.add_handler(CommandHandler("unban", unban_command, filters=budapest_filter))
     application.add_handler(CommandHandler("mute", mute_command, filters=budapest_filter))
@@ -307,9 +363,11 @@ def main():
     application.add_handler(CommandHandler("top", top_command, filters=budapest_filter))
     application.add_handler(CommandHandler("lastseen", lastseen_command, filters=budapest_filter))
     
+    # Autopost
     application.add_handler(CommandHandler("autopost", autopost_command, filters=budapest_filter))
     application.add_handler(CommandHandler("autoposttest", autopost_test_command, filters=budapest_filter))
     
+    # Game commands for all versions
     for version in ['need', 'try', 'more']:
         application.add_handler(CommandHandler(f"{version}add", wordadd_command, filters=budapest_filter))
         application.add_handler(CommandHandler(f"{version}edit", wordedit_command, filters=budapest_filter))
@@ -331,6 +389,7 @@ def main():
     application.add_handler(CommandHandler("edit", wordedit_command, filters=budapest_filter))
     application.add_handler(CommandHandler("wordclear", wordclear_command, filters=budapest_filter))
     
+    # TrixTicket admin commands
     application.add_handler(CommandHandler("givett", givett_command, filters=budapest_filter))
     application.add_handler(CommandHandler("removett", removett_command, filters=budapest_filter))
     application.add_handler(CommandHandler("userstt", userstt_command, filters=budapest_filter))
@@ -338,9 +397,9 @@ def main():
     application.add_handler(CommandHandler("ttrenumber", ttrenumber_command, filters=budapest_filter))
     application.add_handler(CommandHandler("ttsave", ttsave_command, filters=budapest_filter))
     application.add_handler(CommandHandler("trixticketclear", trixticketclear_command, filters=budapest_filter))
-    
+    # Callback handler BEFORE message handler (существующий)
     application.add_handler(CallbackQueryHandler(handle_all_callbacks))
-    
+    # Message handler
     application.add_handler(MessageHandler(
         filters.TEXT | filters.PHOTO | filters.VIDEO | filters.Document.ALL,
         handle_messages
@@ -348,26 +407,29 @@ def main():
     
     application.add_error_handler(error_handler)
     
+    # Start services
     if Config.SCHEDULER_ENABLED:
         loop.create_task(autopost_service.start())
-        print("Autopost enabled")
+        print("✅ Autopost enabled")
     
     loop.create_task(stats_scheduler.start())
-    print("Stats scheduler enabled")
+    print("✅ Stats scheduler enabled")
     
-    logger.info("TrixBot v5.3 OPTIMIZED starting...")
+    logger.info("🤖 TrixBot v5.3 OPTIMIZED starting...")
     print("\n" + "="*50)
-    print("TRIXBOT v5.3 OPTIMIZED IS READY!")
+    print("🤖 TRIXBOT v5.3 OPTIMIZED IS READY!")
     print("="*50)
-    print(f"Callback prefixes: mnc_, pbc_, mdc_, adm_, prc_, ctlg_, gmc_, gwc_, rtg_, rtgm_, ttc_, hpc_")
-    print(f"Moderation: {Config.MODERATION_GROUP_ID}")
-    print(f"Admin group: {Config.ADMIN_GROUP_ID}")
-    print(f"Budapest chat (AUTO-FILTERED): {Config.BUDAPEST_CHAT_ID}")
+    print(f"✨ Removed: basic_handler, advanced_moderation, stats_commands")
+    print(f"✅ Added: silence, talkto, optimized cooldowns")
+    print(f"📋 Callback prefixes: mnc_, pbc_, mdc_, adm_, prc_, ctc_, gmc_, gwc_, rtc_, rmc_, ttc_, hpc_")
+    print(f"📢 Moderation: {Config.MODERATION_GROUP_ID}")
+    print(f"🔧 Admin group: {Config.ADMIN_GROUP_ID}")
+    print(f"🚫 Budapest chat (AUTO-FILTERED): {Config.BUDAPEST_CHAT_ID}")
     
     if db_initialized:
-        print(f"Database: Connected")
+        print(f"💾 Database: ✅ Connected")
     else:
-        print(f"Database: Limited mode")
+        print(f"💾 Database: ⚠️ Limited mode")
     
     print("="*50 + "\n")
     
@@ -378,19 +440,19 @@ def main():
         )
     except KeyboardInterrupt:
         logger.info("Received KeyboardInterrupt")
-        print("\nStopping bot...")
+        print("\n🛑 Stopping bot...")
     except Exception as e:
         logger.error(f"Error in main loop: {e}", exc_info=True)
-        print(f"\nError: {e}")
+        print(f"\n❌ Error: {e}")
     finally:
-        print("Cleaning up...")
+        print("🔄 Cleaning up...")
         
         try:
             loop.run_until_complete(stats_scheduler.stop())
             loop.run_until_complete(autopost_service.stop())
             loop.run_until_complete(cooldown_service.stop_cleanup_task())
             loop.run_until_complete(db.close())
-            print("Cleanup complete")
+            print("✅ Cleanup complete")
         except Exception as cleanup_error:
             logger.error(f"Error during cleanup: {cleanup_error}")
         
@@ -400,11 +462,11 @@ def main():
                 task.cancel()
             loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
             loop.close()
-            print("Event loop closed")
+            print("✅ Event loop closed")
         except Exception as loop_error:
             logger.error(f"Error closing loop: {loop_error}")
         
-        print("\nTrixBot v5.3 OPTIMIZED stopped")
+        print("\n👋 TrixBot v5.3 OPTIMIZED stopped")
 
 if __name__ == '__main__':
     main()
