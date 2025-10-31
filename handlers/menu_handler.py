@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
-Optimized Menu Handler with unique callback prefixes
-Prefix: mnc_ (menu callback)
+Menu Handler v6.0 - SIMPLIFIED
+Prefix: menu_ (уникальный для меню)
 """
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
@@ -9,18 +9,24 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# ============= CALLBACK PREFIX: mnc_ =============
+# ============= УНИКАЛЬНЫЕ CALLBACK ПРЕФИКСЫ: menu_ =============
 MENU_CALLBACKS = {
-    'write': 'mnc_w',           # Show write menu
-    'read': 'mnc_r',            # Show main menu
-    'budapest': 'mnc_bp',       # Budapest menu
-    'services': 'mnc_srv',      # Services (Piar)
-    'actual': 'mnc_act',        # Actual posts
-    'back': 'mnc_bk',           # Back to main
-    'announcements': 'mnc_ann', # Announcements submenu
-    'news': 'mnc_nws',          # News category
-    'overheard': 'mnc_ovr',     # Overheard category
-    'complaints': 'mnc_cmp'     # Complaints category
+    'write': 'menu_write',              # Главное меню создания
+    'back_main': 'menu_back_main',      # Вернуться в главное меню
+    
+    # Пост в Будапешт
+    'budapest': 'menu_budapest',        # Пост в Будапешт (выбор анон/с username)
+    'bud_anon': 'menu_bud_anon',       # Анонимно
+    'bud_username': 'menu_bud_username', # С username
+    
+    # Каталог услуг
+    'catalog': 'menu_catalog',          # Заявка в каталог
+    
+    # Барахолка
+    'baraholka': 'menu_baraholka',      # Барахолка (выбор раздела)
+    'bara_sell': 'menu_bara_sell',      # Продам
+    'bara_buy': 'menu_bara_buy',        # Куплю
+    'bara_give': 'menu_bara_give',      # Отдам
 }
 
 async def handle_menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -33,163 +39,204 @@ async def handle_menu_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     
     handlers = {
         MENU_CALLBACKS['write']: show_write_menu,
-        MENU_CALLBACKS['read']: show_main_menu,
-        MENU_CALLBACKS['back']: show_main_menu,
-        MENU_CALLBACKS['budapest']: show_budapest_menu,
-        MENU_CALLBACKS['services']: start_piar,
-        MENU_CALLBACKS['actual']: start_actual_post,
-        MENU_CALLBACKS['announcements']: show_announcements_menu,
-        MENU_CALLBACKS['news']: lambda u, c: start_category_post(u, c, "🗯️ Будапешт", "🔔 Новости"),
-        MENU_CALLBACKS['overheard']: lambda u, c: start_category_post(u, c, "🗯️ Будапешт", "🔕 Подслушано", True),
-        MENU_CALLBACKS['complaints']: lambda u, c: start_category_post(u, c, "🗯️ Будапешт", "👸🏼 Жалобы", True)
+        MENU_CALLBACKS['back_main']: show_main_menu,
+        MENU_CALLBACKS['budapest']: show_budapest_options,
+        MENU_CALLBACKS['bud_anon']: lambda u, c: start_budapest_post(u, c, anonymous=True),
+        MENU_CALLBACKS['bud_username']: lambda u, c: start_budapest_post(u, c, anonymous=False),
+        MENU_CALLBACKS['catalog']: start_catalog_request,
+        MENU_CALLBACKS['baraholka']: show_baraholka_menu,
+        MENU_CALLBACKS['bara_sell']: lambda u, c: start_baraholka_post(u, c, 'Продам'),
+        MENU_CALLBACKS['bara_buy']: lambda u, c: start_baraholka_post(u, c, 'Куплю'),
+        MENU_CALLBACKS['bara_give']: lambda u, c: start_baraholka_post(u, c, 'Отдам'),
     }
     
     handler = handlers.get(action)
     if handler:
         await handler(update, context)
     else:
-        await query.answer("Функция в разработке", show_alert=True)
+        await query.answer("⚠️ Неизвестная команда", show_alert=True)
 
-async def show_budapest_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Budapest category menu"""
+# ============= МЕНЮ СОЗДАНИЯ =============
+
+async def show_write_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Упрощенное меню создания публикаций"""
     keyboard = [
-        [InlineKeyboardButton("📣 Объявления", callback_data=MENU_CALLBACKS['announcements'])],
-        [InlineKeyboardButton("🔔 Новости", callback_data=MENU_CALLBACKS['news'])],
-        [InlineKeyboardButton("🔕 Подслушано", callback_data=MENU_CALLBACKS['overheard'])],
-        [InlineKeyboardButton("👸🏼 Жалобы", callback_data=MENU_CALLBACKS['complaints'])],
+        [InlineKeyboardButton("📝 Пост в Будапешт", callback_data=MENU_CALLBACKS['budapest'])],
+        [InlineKeyboardButton("🙅 Заявка в Каталог Услуг", callback_data=MENU_CALLBACKS['catalog'])],
+        [InlineKeyboardButton("🛒 Предложить на Барахолке", callback_data=MENU_CALLBACKS['baraholka'])],
+        [InlineKeyboardButton("🔙 Главное меню", callback_data=MENU_CALLBACKS['back_main'])]
+    ]
+    
+    text = (
+        "✍️ **Создание публикации**\n\n"
+        
+        "**📝 Пост в Будапешт**\n"
+        "Публикация в канал Будапешт\n"
+        "Анонимно или с вашим username\n\n"
+        
+        "**🙅 Каталог Услуг**\n"
+        "Добавить свою услугу/мастера\n"
+        "в каталог Будапешта\n\n"
+        
+        "**🛒 Барахолка**\n"
+        "Продать, купить или отдать\n"
+        "товары в сообществе"
+    )
+    
+    await update.callback_query.edit_message_text(
+        text, 
+        reply_markup=InlineKeyboardMarkup(keyboard), 
+        parse_mode='Markdown'
+    )
+
+async def show_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Возврат в главное меню"""
+    from handlers.start_handler import show_main_menu as original_show_main_menu
+    await original_show_main_menu(update, context)
+
+# ============= ПОСТ В БУДАПЕШТ =============
+
+async def show_budapest_options(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Выбор: анонимно или с username"""
+    keyboard = [
+        [InlineKeyboardButton("📩 Анонимно", callback_data=MENU_CALLBACKS['bud_anon'])],
+        [InlineKeyboardButton("💬 С моим username", callback_data=MENU_CALLBACKS['bud_username'])],
         [InlineKeyboardButton("🔙 Назад", callback_data=MENU_CALLBACKS['write'])]
     ]
     
     text = (
-        "🙅‍♂️ *Пост в Будапешт*\n\n"
-        "📣 *Объявления* - товары, услуги, поиски\n"
-        "🔔 *Новости* - актуальная информация\n"
-        "🔕 *Подслушано* - анонимные истории\n"
-        "👑 *Жалобы* - анонимные недовольства"
+        "📝 **Пост в Будапешт**\n\n"
+        "Выберите способ публикации:\n\n"
+        
+        "**📩 Анонимно**\n"
+        "Ваше имя не будет указано в посте\n\n"
+        
+        "**💬 С username**\n"
+        "Ваш @username будет виден в посте"
     )
     
     await update.callback_query.edit_message_text(
-        text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown'
-    )
-
-async def show_announcements_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Announcements subcategories"""
-    keyboard = [
-        [
-            InlineKeyboardButton("🕵🏻‍♀️ Куплю", callback_data="pbc_buy"),
-            InlineKeyboardButton("👷‍♀️ Работа", callback_data="pbc_wrk")
-        ],
-        [
-            InlineKeyboardButton("🕵🏼 Отдам", callback_data="pbc_free"),
-            InlineKeyboardButton("🏢 Аренда", callback_data="pbc_rnt")
-        ],
-        [
-            InlineKeyboardButton("🕵🏻‍♂️ Продам", callback_data="pbc_sell"),
-            InlineKeyboardButton("🪙 Криптовалюта", callback_data="pbc_cry")
-        ],
-        [
-            InlineKeyboardButton("🫧 Ищу", callback_data="pbc_oth"),
-            InlineKeyboardButton("✖️уё Будапешт", callback_data="pbc_evt")
-        ],
-        [InlineKeyboardButton("🔙 Назад", callback_data=MENU_CALLBACKS['budapest'])]
-    ]
-    
-    await update.callback_query.edit_message_text(
-        "📣 *Объявления*\n\nВыберите подкатегорию:",
+        text,
         reply_markup=InlineKeyboardMarkup(keyboard),
         parse_mode='Markdown'
     )
 
-async def start_piar(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Start Services form"""
+async def start_budapest_post(update: Update, context: ContextTypes.DEFAULT_TYPE, anonymous: bool):
+    """Начать создание поста в Будапешт"""
+    context.user_data['post_data'] = {
+        'category': '🙅‍♂️ Будапешт',
+        'anonymous': anonymous,
+        'type': 'budapest'
+    }
+    context.user_data['waiting_for'] = 'budapest_text'
+    
+    anon_text = "анонимно" if anonymous else "с вашим username"
+    
+    keyboard = [[InlineKeyboardButton("🔙 Отмена", callback_data=MENU_CALLBACKS['write'])]]
+    
+    text = (
+        f"📝 **Пост в Будапешт** ({anon_text})\n\n"
+        "Напишите текст вашего поста.\n"
+        "Можете добавить:\n"
+        "• Текст\n"
+        "• Фото\n"
+        "• Видео\n\n"
+        "💡 После отправки пост пройдет модерацию"
+    )
+    
+    await update.callback_query.edit_message_text(
+        text,
+        reply_markup=InlineKeyboardMarkup(keyboard),
+        parse_mode='Markdown'
+    )
+
+# ============= КАТАЛОГ УСЛУГ =============
+
+async def start_catalog_request(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Перенаправить на piar handler для каталога"""
+    # Вызываем существующий piar handler
     context.user_data['piar_data'] = {}
     context.user_data['waiting_for'] = 'piar_name'
     context.user_data['piar_step'] = 'name'
     
-    keyboard = [[InlineKeyboardButton("↩️ Назад", callback_data=MENU_CALLBACKS['write'])]]
-
-    text = (
-        "🪄 *Заявка в каталог Будапешта*\n\n"
-        "🧲 *Цель:* упростить поиск услуг и мастеров\n\n"
-        "💡 *Шаг 1 из 8*\n"
-        "💭 Напишите своё имя, псевдоним:"
-    )
-    
-    await update.callback_query.edit_message_text(
-        text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown'
-    )
-
-async def start_actual_post(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Start Actual post"""
-    context.user_data['post_data'] = {
-        'category': '⚡️Актуальное',
-        'is_actual': True
-    }
-    
-    keyboard = [[InlineKeyboardButton("◀️ Назад", callback_data=MENU_CALLBACKS['write'])]]
+    keyboard = [[InlineKeyboardButton("🔙 Назад", callback_data=MENU_CALLBACKS['write'])]]
     
     text = (
-        "⚡️ *Актуальное*\n\n"
-        "💡 Срочные и важные сообщения\n"
-        "📌 Будут закреплены в чате\n\n"
-        "🫧 *Примеры:*\n"
-        "- Ищу стоматолога на сегодня\n"
-        "- Срочно нужен перевозчик\n"
-        "- Потерял паспорт на вокзале\n\n"
-        "⚡️ *Введите текст:*"
+        "🙅 **Заявка в Каталог Услуг**\n\n"
+        "🎯 Цель: упростить поиск услуг и мастеров\n\n"
+        "**Шаг 1 из 8**\n"
+        "💭 Напишите ваше имя или псевдоним:"
     )
-
-    await update.callback_query.edit_message_text(
-        text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown'
-    )
-    context.user_data['waiting_for'] = 'post_text'
-
-async def start_category_post(update: Update, context: ContextTypes.DEFAULT_TYPE, 
-                              category: str, subcategory: str, anonymous: bool = False):
-    """Start post creation"""
-    context.user_data['post_data'] = {
-        'category': category,
-        'subcategory': subcategory,
-        'anonymous': anonymous
-    }
-    
-    keyboard = [[InlineKeyboardButton("↩️ Назад", callback_data=MENU_CALLBACKS['budapest'])]]
-    
-    anon_text = " (анонимно)" if anonymous else ""
-    text = f"{category} → {subcategory}{anon_text}\n\n🤳 Отправьте текст, фото, видео:"
     
     await update.callback_query.edit_message_text(
-        text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown'
+        text,
+        reply_markup=InlineKeyboardMarkup(keyboard),
+        parse_mode='Markdown'
     )
-    context.user_data['waiting_for'] = 'post_text'
 
-async def show_write_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Write menu"""
+# ============= БАРАХОЛКА =============
+
+async def show_baraholka_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Меню выбора раздела барахолки"""
     keyboard = [
-        [InlineKeyboardButton("Пост в 🙅‍♂️Будапешт/🕵🏼‍♀️КОП", callback_data=MENU_CALLBACKS['budapest'])],
-        [InlineKeyboardButton("Заявка в 🙅Каталог Услуг", callback_data=MENU_CALLBACKS['services'])],
-        [InlineKeyboardButton("⚡️Актуальное", callback_data=MENU_CALLBACKS['actual'])],
-        [InlineKeyboardButton("🚶‍♀️Читать", callback_data=MENU_CALLBACKS['read'])]
+        [InlineKeyboardButton("💰 Продам", callback_data=MENU_CALLBACKS['bara_sell'])],
+        [InlineKeyboardButton("🔎 Куплю", callback_data=MENU_CALLBACKS['bara_buy'])],
+        [InlineKeyboardButton("🎁 Отдам", callback_data=MENU_CALLBACKS['bara_give'])],
+        [InlineKeyboardButton("🔙 Назад", callback_data=MENU_CALLBACKS['write'])]
     ]
     
     text = (
-        "• *Разделы публикаций*\n\n"
-        "*🙅‍♂️ Будапешт / 🕵🏼‍♀️ КОП*\n"
-        "Объявления, новости, жалобы\n\n"
-        "*🙅 Каталог Услуг*\n"
-        "Мастера и специалисты\n\n"
-        "*⚡️ Актуальное*\n"
-        "Срочные сообщения"
+        "🛒 **Барахолка Будапешта**\n\n"
+        "Выберите раздел:\n\n"
+        
+        "**💰 Продам**\n"
+        "Продажа товаров и услуг\n\n"
+        
+        "**🔎 Куплю**\n"
+        "Поиск товаров для покупки\n\n"
+        
+        "**🎁 Отдам**\n"
+        "Отдать даром или обменять"
     )
     
     await update.callback_query.edit_message_text(
-        text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown'
+        text,
+        reply_markup=InlineKeyboardMarkup(keyboard),
+        parse_mode='Markdown'
     )
 
-async def show_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Main menu"""
-    from handlers.start_handler import show_main_menu as original_show_main_menu
-    await original_show_main_menu(update, context)
+async def start_baraholka_post(update: Update, context: ContextTypes.DEFAULT_TYPE, section: str):
+    """Начать создание поста на барахолке"""
+    context.user_data['post_data'] = {
+        'category': '🛒 Барахолка',
+        'subcategory': section,
+        'anonymous': False,
+        'type': 'baraholka'
+    }
+    context.user_data['waiting_for'] = 'baraholka_text'
+    
+    emoji_map = {
+        'Продам': '💰',
+        'Куплю': '🔎',
+        'Отдам': '🎁'
+    }
+    
+    keyboard = [[InlineKeyboardButton("🔙 Отмена", callback_data=MENU_CALLBACKS['baraholka'])]]
+    
+    text = (
+        f"{emoji_map.get(section, '🛒')} **Барахолка: {section}**\n\n"
+        "Напишите описание:\n"
+        "• Что предлагаете/ищете\n"
+        "• Цена (если применимо)\n"
+        "• Контакты\n"
+        "• Можете прикрепить фото\n\n"
+        "💡 Пост пройдет модерацию"
+    )
+    
+    await update.callback_query.edit_message_text(
+        text,
+        reply_markup=InlineKeyboardMarkup(keyboard),
+        parse_mode='Markdown'
+    )
 
-# Export callbacks for use in other handlers
-__all__ = ['handle_menu_callback', 'MENU_CALLBACKS']
+__all__ = ['handle_menu_callback', 'MENU_CALLBACKS', 'show_write_menu', 'show_main_menu']
