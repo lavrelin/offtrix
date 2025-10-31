@@ -80,12 +80,12 @@ async def itsme_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         hours = remaining // 3600
         minutes = (remaining % 3600) // 60
         await update.message.reply_text(
-            f"⏳ Следующая анкета через:\n{hours}ч {minutes}м"
+            f"Следующая анкета через:\n{hours}ч {minutes}м"
         )
         return
     context.user_data['rating_form'] = {'step': 'gender'}
     await update.message.reply_text(
-        "🎭 Создание анкеты\n\nВыберите пол:",
+        "Создание анкеты\n\nВыберите пол:",
         reply_markup=get_gender_keyboard()
     )
 
@@ -97,7 +97,7 @@ async def handle_rate_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     
     if data == RATING_CALLBACKS['cancel']:
         context.user_data.pop('rating_form', None)
-        await query.edit_message_text("❌ Создание анкеты отменено")
+        await query.edit_message_text("Создание анкеты отменено")
         return
     
     if data == RATING_CALLBACKS['noop']:
@@ -109,7 +109,7 @@ async def handle_rate_callback(update: Update, context: ContextTypes.DEFAULT_TYP
             'step': 'age',
             'gender': gender
         }
-        gender_text = "👱🏻‍♀️ Девушка" if gender == 'girl' else "🤵🏼‍♂️ Парень"
+        gender_text = "Девушка" if gender == 'girl' else "Парень"
         await query.edit_message_text(
             f"{gender_text}\n\nВведите возраст ({MIN_AGE}-{MAX_AGE}):"
         )
@@ -118,7 +118,7 @@ async def handle_rate_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     if data.startswith(RATING_CALLBACKS['vote']):
         parts = data.split(':')
         if len(parts) != 3:
-            await query.answer("❌ Ошибка данных")
+            await query.answer("Ошибка данных")
             return
         
         post_id = int(parts[1])
@@ -128,18 +128,18 @@ async def handle_rate_callback(update: Update, context: ContextTypes.DEFAULT_TYP
             try:
                 post = await session.get(RatingPost, post_id)
                 if not post:
-                    await query.answer("❌ Анкета не найдена", show_alert=True)
+                    await query.answer("Анкета не найдена", show_alert=True)
                     return
                 
                 if post.user_id == user_id:
-                    await query.answer("❌ Нельзя голосовать за себя", show_alert=True)
+                    await query.answer("Нельзя голосовать за себя", show_alert=True)
                     return
                 
                 if not post.user_votes:
                     post.user_votes = {}
                 
                 if str(user_id) in post.user_votes:
-                    await query.answer("❌ Вы уже голосовали", show_alert=True)
+                    await query.answer("Вы уже голосовали", show_alert=True)
                     return
                 
                 post.user_votes[str(user_id)] = vote_value
@@ -153,8 +153,8 @@ async def handle_rate_callback(update: Update, context: ContextTypes.DEFAULT_TYP
                 
                 await session.commit()
                 
-                vote_text = {-2: "😭 -2", -1: "👎 -1", 0: "😐 0", 1: "👍 +1", 2: "🔥 +2"}
-                await query.answer(f"✅ Голос учтён: {vote_text[vote_value]}")
+                vote_text = {-2: "-2", -1: "-1", 0: "0", 1: "+1", 2: "+2"}
+                await query.answer(f"Голос учтён: {vote_text[vote_value]}")
                 
                 await query.edit_message_reply_markup(
                     reply_markup=get_voting_keyboard(
@@ -167,7 +167,7 @@ async def handle_rate_callback(update: Update, context: ContextTypes.DEFAULT_TYP
                 
             except Exception as e:
                 logger.error(f"Vote error: {e}")
-                await query.answer("❌ Ошибка голосования", show_alert=True)
+                await query.answer("Ошибка голосования", show_alert=True)
         return
 
 async def handle_rate_age(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -177,12 +177,12 @@ async def handle_rate_age(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     is_valid, result = validate_age(update.message.text)
     if not is_valid:
-        await update.message.reply_text(f"❌ {result}\n\nВведите возраст снова:")
+        await update.message.reply_text(f"{result}\n\nВведите возраст снова:")
         return
     
     form_data['age'] = result
     form_data['step'] = 'name'
-    await update.message.reply_text("📝 Введите имя (макс 20 символов):")
+    await update.message.reply_text("Введите имя (макс 20 символов):")
 
 async def handle_rate_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
     form_data = context.user_data.get('rating_form')
@@ -191,13 +191,13 @@ async def handle_rate_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     name = update.message.text.strip()
     if not name or len(name) > 20:
-        await update.message.reply_text("❌ Имя до 20 символов\n\nВведите имя снова:")
+        await update.message.reply_text("Имя до 20 символов\n\nВведите имя снова:")
         return
     
     form_data['name'] = name
     form_data['step'] = 'about'
     await update.message.reply_text(
-        f"💬 О себе (макс {MAX_ABOUT_WORDS} слова, каждое до {MAX_WORD_LENGTH} букв):"
+        f"О себе (макс {MAX_ABOUT_WORDS} слова, каждое до {MAX_WORD_LENGTH} букв):"
     )
 
 async def handle_rate_about(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -207,12 +207,12 @@ async def handle_rate_about(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     is_valid, result = validate_about(update.message.text)
     if not is_valid:
-        await update.message.reply_text(f"❌ {result}\n\nВведите снова:")
+        await update.message.reply_text(f"{result}\n\nВведите снова:")
         return
     
     form_data['about'] = result
     form_data['step'] = 'profile'
-    await update.message.reply_text("🔗 Отправьте ссылку на профиль Instagram:")
+    await update.message.reply_text("Отправьте ссылку на профиль Instagram:")
 
 async def handle_rate_profile(update: Update, context: ContextTypes.DEFAULT_TYPE):
     form_data = context.user_data.get('rating_form')
@@ -221,12 +221,12 @@ async def handle_rate_profile(update: Update, context: ContextTypes.DEFAULT_TYPE
     
     is_valid, profile_url = validate_instagram_url(update.message.text)
     if not is_valid:
-        await update.message.reply_text("❌ Неверная ссылка Instagram\n\nОтправьте снова:")
+        await update.message.reply_text("Неверная ссылка Instagram\n\nОтправьте снова:")
         return
     
     form_data['profile_url'] = profile_url
     form_data['step'] = 'photo'
-    await update.message.reply_text("📸 Отправьте своё фото:")
+    await update.message.reply_text("Отправьте своё фото:")
 
 async def handle_rate_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     form_data = context.user_data.get('rating_form')
@@ -234,7 +234,7 @@ async def handle_rate_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     
     if not update.message.photo:
-        await update.message.reply_text("❌ Отправьте фото")
+        await update.message.reply_text("Отправьте фото")
         return
     
     photo_file_id = update.message.photo[-1].file_id
@@ -262,11 +262,11 @@ async def handle_rate_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await session.commit()
             await session.refresh(new_post)
             
-            gender_emoji = "👱🏻‍♀️" if form_data['gender'] == 'girl' else "🤵🏼‍♂️"
+            gender_emoji = "" if form_data['gender'] == 'girl' else ""
             caption = (
                 f"{gender_emoji} {safe_markdown(form_data['name'])}, {form_data['age']}\n"
-                f"💬 {safe_markdown(form_data['about'])}\n"
-                f"🔗 [Instagram]({form_data['profile_url']})"
+                f"{safe_markdown(form_data['about'])}\n"
+                f"[Instagram]({form_data['profile_url']})"
             )
             
             msg = await context.bot.send_photo(
@@ -280,19 +280,19 @@ async def handle_rate_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
             new_post.moderation_message_id = msg.message_id
             await session.commit()
             
-            await update.message.reply_text("✅ Анкета отправлена на модерацию!")
+            await update.message.reply_text("Анкета отправлена на модерацию!")
             context.user_data.pop('rating_form', None)
             
         except Exception as e:
             logger.error(f"Rating post creation error: {e}")
-            await update.message.reply_text("❌ Ошибка создания анкеты")
+            await update.message.reply_text("Ошибка создания анкеты")
 
 async def handle_rate_moderation_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     user_id = update.effective_user.id
     
     if user_id not in Config.ADMIN_IDS:
-        await query.answer("❌ Только для админов", show_alert=True)
+        await query.answer("Только для админов", show_alert=True)
         return
     
     await query.answer()
@@ -306,22 +306,22 @@ async def handle_rate_moderation_callback(update: Update, context: ContextTypes.
                 post = await session.get(RatingPost, post_id)
                 if not post:
                     await query.edit_message_caption(
-                        caption=query.message.caption + "\n\n❌ Анкета не найдена"
+                        caption=query.message.caption + "\n\nАнкета не найдена"
                     )
                     return
                 
                 post.status = 'approved'
                 await session.commit()
                 
-                gender_emoji = "👱🏻‍♀️" if post.gender == 'girl' else "🤵🏼‍♂️"
+                gender_emoji = "" if post.gender == 'girl' else ""
                 caption = (
                     f"{gender_emoji} {safe_markdown(post.name)}, {post.age}\n"
-                    f"💬 {safe_markdown(post.about)}\n"
-                    f"🔗 [Instagram]({post.profile_url})"
+                    f"{safe_markdown(post.about)}\n"
+                    f"[Instagram]({post.profile_url})"
                 )
                 
                 msg = await context.bot.send_photo(
-                    chat_id=Config.CHANNEL_ID,
+                    chat_id=Config.TARGET_CHANNEL_ID,
                     photo=post.photo_file_id,
                     caption=caption,
                     parse_mode='Markdown',
@@ -332,13 +332,13 @@ async def handle_rate_moderation_callback(update: Update, context: ContextTypes.
                 await session.commit()
                 
                 await query.edit_message_caption(
-                    caption=query.message.caption + "\n\n✅ Одобрено и опубликовано"
+                    caption=query.message.caption + "\n\nОдобрено и опубликовано"
                 )
                 
                 try:
                     await context.bot.send_message(
                         chat_id=post.user_id,
-                        text="✅ Ваша анкета одобрена и опубликована!"
+                        text="Ваша анкета одобрена и опубликована!"
                     )
                 except:
                     pass
@@ -346,7 +346,7 @@ async def handle_rate_moderation_callback(update: Update, context: ContextTypes.
             except Exception as e:
                 logger.error(f"Approve error: {e}")
                 await query.edit_message_caption(
-                    caption=query.message.caption + "\n\n❌ Ошибка публикации"
+                    caption=query.message.caption + "\n\nОшибка публикации"
                 )
         return
     
@@ -358,7 +358,7 @@ async def handle_rate_moderation_callback(update: Update, context: ContextTypes.
                 post = await session.get(RatingPost, post_id)
                 if not post:
                     await query.edit_message_caption(
-                        caption=query.message.caption + "\n\n❌ Анкета не найдена"
+                        caption=query.message.caption + "\n\nАнкета не найдена"
                     )
                     return
                 
@@ -366,13 +366,13 @@ async def handle_rate_moderation_callback(update: Update, context: ContextTypes.
                 await session.commit()
                 
                 await query.edit_message_caption(
-                    caption=query.message.caption + "\n\n❌ Отклонено"
+                    caption=query.message.caption + "\n\nОтклонено"
                 )
                 
                 try:
                     await context.bot.send_message(
                         chat_id=post.user_id,
-                        text="❌ Ваша анкета отклонена модератором"
+                        text="Ваша анкета отклонена модератором"
                     )
                 except:
                     pass
@@ -393,19 +393,19 @@ async def toppeople_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             top_posts = result.scalars().all()
             
             if not top_posts:
-                await update.message.reply_text("📊 Рейтинг пока пуст")
+                await update.message.reply_text("Рейтинг пока пуст")
                 return
             
-            text = "🏆 ТОП-10 ЛЮДЕЙ\n\n"
+            text = "ТОП-10 ЛЮДЕЙ\n\n"
             for i, post in enumerate(top_posts, 1):
-                emoji = "👱🏻‍♀️" if post.gender == 'girl' else "🤵🏼‍♂️"
-                text += f"{i}. {emoji} {post.name} - ⭐ {post.total_score} ({post.vote_count} голосов)\n"
+                emoji = "" if post.gender == 'girl' else ""
+                text += f"{i}. {emoji} {post.name} - {post.total_score} ({post.vote_count} голосов)\n"
             
             await update.message.reply_text(text)
             
         except Exception as e:
             logger.error(f"Toppeople error: {e}")
-            await update.message.reply_text("❌ Ошибка получения рейтинга")
+            await update.message.reply_text("Ошибка получения рейтинга")
 
 async def topboys_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     async with db.session_maker() as session:
@@ -421,18 +421,18 @@ async def topboys_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             top_posts = result.scalars().all()
             
             if not top_posts:
-                await update.message.reply_text("📊 Рейтинг парней пуст")
+                await update.message.reply_text("Рейтинг парней пуст")
                 return
             
-            text = "🤵🏼‍♂️ ТОП-10 ПАРНЕЙ\n\n"
+            text = "ТОП-10 ПАРНЕЙ\n\n"
             for i, post in enumerate(top_posts, 1):
-                text += f"{i}. {post.name} - ⭐ {post.total_score} ({post.vote_count} голосов)\n"
+                text += f"{i}. {post.name} - {post.total_score} ({post.vote_count} голосов)\n"
             
             await update.message.reply_text(text)
             
         except Exception as e:
             logger.error(f"Topboys error: {e}")
-            await update.message.reply_text("❌ Ошибка получения рейтинга")
+            await update.message.reply_text("Ошибка получения рейтинга")
 
 async def topgirls_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     async with db.session_maker() as session:
@@ -448,24 +448,24 @@ async def topgirls_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             top_posts = result.scalars().all()
             
             if not top_posts:
-                await update.message.reply_text("📊 Рейтинг девушек пуст")
+                await update.message.reply_text("Рейтинг девушек пуст")
                 return
             
-            text = "👱🏻‍♀️ ТОП-10 ДЕВУШЕК\n\n"
+            text = "ТОП-10 ДЕВУШЕК\n\n"
             for i, post in enumerate(top_posts, 1):
-                text += f"{i}. {post.name} - ⭐ {post.total_score} ({post.vote_count} голосов)\n"
+                text += f"{i}. {post.name} - {post.total_score} ({post.vote_count} голосов)\n"
             
             await update.message.reply_text(text)
             
         except Exception as e:
             logger.error(f"Topgirls error: {e}")
-            await update.message.reply_text("❌ Ошибка получения рейтинга")
+            await update.message.reply_text("Ошибка получения рейтинга")
 
 async def toppeoplereset_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     
     if user_id not in Config.ADMIN_IDS:
-        await update.message.reply_text("❌ Только для админов")
+        await update.message.reply_text("Только для админов")
         return
     
     async with db.session_maker() as session:
@@ -482,11 +482,11 @@ async def toppeoplereset_command(update: Update, context: ContextTypes.DEFAULT_T
             await session.execute(stmt)
             await session.commit()
             
-            await update.message.reply_text("✅ Рейтинг сброшен")
+            await update.message.reply_text("Рейтинг сброшен")
             
         except Exception as e:
             logger.error(f"Reset error: {e}")
-            await update.message.reply_text("❌ Ошибка сброса")
+            await update.message.reply_text("Ошибка сброса")
 
 __all__ = [
     'RATING_CALLBACKS',
