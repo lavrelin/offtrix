@@ -59,6 +59,38 @@ class Post(Base):
     piar_description = Column(Text, nullable=True)
 
 
+# ============= РЕЙТИНГ ЛЮДЕЙ (TOPPEOPLE) =============
+
+class RatingPost(Base):
+    """Анкета для рейтинга людей"""
+    __tablename__ = 'rating_posts'
+    
+    id = Column(Integer, primary_key=True)
+    user_id = Column(BigInteger, nullable=False)
+    
+    # Основные данные
+    gender = Column(String(10), nullable=False)  # 'boy' или 'girl'
+    age = Column(Integer, nullable=False)
+    name = Column(String(100), nullable=False)
+    about = Column(String(500), nullable=True)
+    profile_url = Column(String(500), nullable=True)
+    photo_file_id = Column(String(500), nullable=False)
+    
+    # Статистика голосов
+    total_score = Column(Integer, default=0)
+    vote_count = Column(Integer, default=0)
+    vote_counts = Column(JSON, default=dict)  # {-2: 0, -1: 0, 0: 0, 1: 0, 2: 0}
+    user_votes = Column(JSON, default=dict)  # {user_id: vote_value}
+    
+    # Статус и модерация
+    status = Column(String(20), default='pending')  # pending, approved, rejected
+    moderation_message_id = Column(BigInteger, nullable=True)
+    channel_message_id = Column(BigInteger, nullable=True)
+    
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
 # ============= КАТАЛОГ УСЛУГ - ВЕРСИЯ 4.0 =============
 
 class CatalogPost(Base):
@@ -75,6 +107,9 @@ class CatalogPost(Base):
     # ============= УНИКАЛЬНЫЙ НОМЕР ПОСТА =============
     catalog_number = Column(Integer, unique=True, nullable=True)
     
+    # ============= СТАТУС =============
+    status = Column(String(20), default='approved')  # pending, approved, rejected
+    
     # ============= ПОЛЯ ДЛЯ АВТОРА - НОВОЕ В v4.0 =============
     author_username = Column(String(255), nullable=True)  # @username автора услуги
     author_id = Column(BigInteger, nullable=True)  # Telegram ID автора (если доступен)
@@ -84,6 +119,9 @@ class CatalogPost(Base):
     media_file_id = Column(String(500), nullable=True)
     media_group_id = Column(String(255), nullable=True)
     media_json = Column(JSON, default=list, nullable=True)
+    
+    # ============= СЧЁТЧИКИ =============
+    review_count = Column(Integer, default=0)
     
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -101,10 +139,10 @@ class CatalogReview(Base):
     __tablename__ = 'catalog_reviews'
     
     id = Column(Integer, primary_key=True)
-    catalog_post_id = Column(Integer, ForeignKey('catalog_posts.id'))
+    post_id = Column(Integer, ForeignKey('catalog_posts.id'))  # ИСПРАВЛЕНО: было catalog_post_id
     user_id = Column(BigInteger, nullable=False)
     username = Column(String(255))
-    review_text = Column(Text)
+    text = Column(Text)  # ИСПРАВЛЕНО: было review_text
     rating = Column(Integer)
     created_at = Column(DateTime, default=datetime.utcnow)
 
