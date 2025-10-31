@@ -15,7 +15,6 @@ from keyboards import (
 )
 from services.cooldown import cooldown_service, CooldownType
 from services.db import db
-from models import CatalogPost, CatalogReview
 from datetime import datetime, timedelta
 import logging
 
@@ -32,10 +31,11 @@ async def catalog_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Показать каталог"""
     user_id = update.effective_user.id
     
-    async with db.session_maker() as session:
-        try:
-            from sqlalchemy import select
-            
+    try:
+        from models import CatalogPost
+        from sqlalchemy import select
+        
+        async with db.session_maker() as session:
             stmt = select(CatalogPost).where(
                 CatalogPost.status == 'approved'
             ).order_by(CatalogPost.created_at.desc()).limit(1)
@@ -74,10 +74,9 @@ async def catalog_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     caption,
                     reply_markup=get_catalog_card_keyboard(post.__dict__, post.catalog_number)
                 )
-            
-        except Exception as e:
-            logger.error(f"Catalog error: {e}")
-            await update.message.reply_text("❌ Ошибка загрузки каталога")
+    except Exception as e:
+        logger.error(f"Catalog error: {e}")
+        await update.message.reply_text("❌ Ошибка загрузки каталога")
 
 async def search_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Поиск в каталоге"""
@@ -102,6 +101,59 @@ async def addtocatalog_command(update: Update, context: ContextTypes.DEFAULT_TYP
         reply_markup=get_category_keyboard(CATALOG_CATEGORIES)
     )
 
+async def remove_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Удалить карточку из каталога"""
+    user_id = update.effective_user.id
+    
+    if user_id not in Config.ADMIN_IDS:
+        await update.message.reply_text("❌ Только для админов")
+        return
+    
+    args = context.args
+    if not args:
+        await update.message.reply_text(
+            "🗑️ Использование: /remove [номер]\n\n"
+            "Например: /remove 123"
+        )
+        return
+    
+    try:
+        catalog_number = int(args[0])
+    except ValueError:
+        await update.message.reply_text("❌ Неверный номер")
+        return
+    
+    try:
+        from models import CatalogPost
+        from sqlalchemy import select
+        
+        async with db.session_maker() as session:
+            stmt = select(CatalogPost).where(
+                CatalogPost.catalog_number == catalog_number
+            )
+            
+            result = await session.execute(stmt)
+            post = result.scalar_one_or_none()
+            
+            if not post:
+                await update.message.reply_text("❌ Карточка не найдена")
+                return
+            
+            post_name = post.name
+            post_category = post.category
+            
+            await session.delete(post)
+            await session.commit()
+            
+            await update.message.reply_text(
+                f"✅ Карточка #{catalog_number} удалена\n\n"
+                f"📂 {post_category}\n"
+                f"📝 {post_name}"
+            )
+    except Exception as e:
+        logger.error(f"Remove error: {e}")
+        await update.message.reply_text("❌ Ошибка удаления")
+
 async def review_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Оставить отзыв"""
     args = context.args
@@ -120,10 +172,11 @@ async def review_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     user_id = update.effective_user.id
     
-    async with db.session_maker() as session:
-        try:
-            from sqlalchemy import select
-            
+    try:
+        from models import CatalogPost
+        from sqlalchemy import select
+        
+        async with db.session_maker() as session:
             stmt = select(CatalogPost).where(
                 CatalogPost.catalog_number == catalog_number,
                 CatalogPost.status == 'approved'
@@ -165,10 +218,9 @@ async def review_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"⭐ Оценка #{catalog_number}\n\nВыберите рейтинг:",
                 reply_markup=get_rating_keyboard(post.id, catalog_number)
             )
-            
-        except Exception as e:
-            logger.error(f"Review error: {e}")
-            await update.message.reply_text("❌ Ошибка")
+    except Exception as e:
+        logger.error(f"Review error: {e}")
+        await update.message.reply_text("❌ Ошибка")
 
 async def categoryfollow_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Подписка на категории"""
@@ -320,10 +372,11 @@ async def handle_catalog_callback(update: Update, context: ContextTypes.DEFAULT_
     if data.startswith(CATALOG_CALLBACKS['next']):
         browse_data = context.user_data.get('catalog_browse', {})
         
-        async with db.session_maker() as session:
-            try:
-                from sqlalchemy import select
-                
+        try:
+            from models import CatalogPost
+            from sqlalchemy import select
+            
+            async with db.session_maker() as session:
                 offset = browse_data.get('offset', 0) + 1
                 
                 stmt = select(CatalogPost).where(
@@ -361,10 +414,9 @@ async def handle_catalog_callback(update: Update, context: ContextTypes.DEFAULT_
                         caption,
                         get_catalog_card_keyboard(post.__dict__, post.catalog_number)
                     )
-                
-            except Exception as e:
-                logger.error(f"Next catalog error: {e}")
-                await query.answer("❌ Ошибка загрузки", show_alert=True)
+        except Exception as e:
+            logger.error(f"Next catalog error: {e}")
+            await query.answer("❌ Ошибка загрузки", show_alert=True)
         return
 
 async def handle_catalog_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -400,10 +452,11 @@ async def handle_catalog_text(update: Update, context: ContextTypes.DEFAULT_TYPE
             tags = [t.strip() for t in text.split(',') if t.strip()][:10]
             data['tags'] = tags
             
-            async with db.session_maker() as session:
-                try:
-                    from sqlalchemy import select, func
-                    
+            try:
+                from models import CatalogPost
+                from sqlalchemy import select, func
+                
+                async with db.session_maker() as session:
                     stmt = select(func.coalesce(func.max(CatalogPost.catalog_number), 0))
                     result = await session.execute(stmt)
                     max_number = result.scalar()
@@ -433,10 +486,9 @@ async def handle_catalog_text(update: Update, context: ContextTypes.DEFAULT_TYPE
                         f"🏷️ {len(tags)} тегов"
                     )
                     context.user_data.pop('catalog_add', None)
-                    
-                except Exception as e:
-                    logger.error(f"Add post error: {e}")
-                    await update.message.reply_text("❌ Ошибка при добавлении")
+            except Exception as e:
+                logger.error(f"Add post error: {e}")
+                await update.message.reply_text("❌ Ошибка при добавлении")
         return
     
     if 'catalog_search' in context.user_data:
@@ -444,10 +496,11 @@ async def handle_catalog_text(update: Update, context: ContextTypes.DEFAULT_TYPE
         if search_data.get('step') == 'waiting':
             query_text = text.strip()
             
-            async with db.session_maker() as session:
-                try:
-                    from sqlalchemy import select, or_
-                    
+            try:
+                from models import CatalogPost
+                from sqlalchemy import select, or_
+                
+                async with db.session_maker() as session:
                     try:
                         catalog_number = int(query_text)
                         stmt = select(CatalogPost).where(
@@ -492,10 +545,9 @@ async def handle_catalog_text(update: Update, context: ContextTypes.DEFAULT_TYPE
                         )
                     
                     context.user_data.pop('catalog_search', None)
-                    
-                except Exception as e:
-                    logger.error(f"Search error: {e}")
-                    await update.message.reply_text("❌ Ошибка поиска")
+            except Exception as e:
+                logger.error(f"Search error: {e}")
+                await update.message.reply_text("❌ Ошибка поиска")
         return
     
     if 'catalog_review' in context.user_data:
@@ -505,8 +557,10 @@ async def handle_catalog_text(update: Update, context: ContextTypes.DEFAULT_TYPE
             post_id = review_data['post_id']
             rating = review_data['rating']
             
-            async with db.session_maker() as session:
-                try:
+            try:
+                from models import CatalogReview, CatalogPost
+                
+                async with db.session_maker() as session:
                     new_review = CatalogReview(
                         post_id=post_id,
                         user_id=user_id,
@@ -529,64 +583,10 @@ async def handle_catalog_text(update: Update, context: ContextTypes.DEFAULT_TYPE
                         f"💬 {review_text[:100]}"
                     )
                     context.user_data.pop('catalog_review', None)
-                    
-                except Exception as e:
-                    logger.error(f"Review save error: {e}")
-                    await update.message.reply_text("❌ Ошибка сохранения отзыва")
+            except Exception as e:
+                logger.error(f"Review save error: {e}")
+                await update.message.reply_text("❌ Ошибка сохранения отзыва")
         return
-
-async def remove_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Удалить карточку из каталога"""
-    user_id = update.effective_user.id
-    
-    if user_id not in Config.ADMIN_IDS:
-        await update.message.reply_text("❌ Только для админов")
-        return
-    
-    args = context.args
-    if not args:
-        await update.message.reply_text(
-            "🗑️ Использование: /remove [номер]\n\n"
-            "Например: /remove 123"
-        )
-        return
-    
-    try:
-        catalog_number = int(args[0])
-    except ValueError:
-        await update.message.reply_text("❌ Неверный номер")
-        return
-    
-    async with db.session_maker() as session:
-        try:
-            from sqlalchemy import select
-            
-            stmt = select(CatalogPost).where(
-                CatalogPost.catalog_number == catalog_number
-            )
-            
-            result = await session.execute(stmt)
-            post = result.scalar_one_or_none()
-            
-            if not post:
-                await update.message.reply_text("❌ Карточка не найдена")
-                return
-            
-            post_name = post.name
-            post_category = post.category
-            
-            await session.delete(post)
-            await session.commit()
-            
-            await update.message.reply_text(
-                f"✅ Карточка #{catalog_number} удалена\n\n"
-                f"📂 {post_category}\n"
-                f"📝 {post_name}"
-            )
-            
-        except Exception as e:
-            logger.error(f"Remove error: {e}")
-            await update.message.reply_text("❌ Ошибка удаления")
 
 async def handle_catalog_media(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработчик медиа для каталога"""
